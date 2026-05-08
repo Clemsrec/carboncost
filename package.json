@@ -8,7 +8,7 @@
   "packageManager": "pnpm@10.0.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/carbon-site-kit/carbon-site-kit.git"
+    "url": "git+https://github.com/carbon-site-kit/carbon-site-kit.git"
   },
   "bugs": {
     "url": "https://github.com/carbon-site-kit/carbon-site-kit/issues"
