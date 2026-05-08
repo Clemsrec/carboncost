@@ -1,14 +1,13 @@
 {
   "name": "@clemsrec/script-tag",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Script-tag / CDN global bundle for Carbon Site Kit.",
   "type": "module",
   "main": "./dist/carbon-site-kit.min.js",
   "module": "./dist/carbon-site-kit.min.js",
-  "types": "./src/index.ts",
+  "types": "./dist/carbon-site-kit.d.ts",
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "license": "MIT",
   "publishConfig": {
