@@ -162,8 +162,8 @@ See `CONTRIBUTING.md` and `RELEASING.md`.
 
 ## Community
 
-- Issues: https://github.com/carbon-site-kit/carbon-site-kit/issues
-- Discussions: https://github.com/carbon-site-kit/carbon-site-kit/discussions
+- Issues: https://github.com/Clemsrec/carboncost/issues
+- Discussions: https://github.com/Clemsrec/carboncost/discussions
 
 ## Contributors and developers
 

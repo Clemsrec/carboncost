@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/@changesets/config@3.0.3/schema.json",
-  "changelog": ["@changesets/cli/changelog", { "repo": "carbon-site-kit/carbon-site-kit" }],
+  "changelog": ["@changesets/cli/changelog", { "repo": "Clemsrec/carboncost" }],
   "commit": false,
   "fixed": [],
   "linked": [],

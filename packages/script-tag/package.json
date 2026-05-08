@@ -13,12 +13,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/carbon-site-kit/carbon-site-kit.git"
+    "url": "git+https://github.com/Clemsrec/carboncost.git"
   },
   "bugs": {
-    "url": "https://github.com/carbon-site-kit/carbon-site-kit/issues"
+    "url": "https://github.com/Clemsrec/carboncost/issues"
   },
-  "homepage": "https://github.com/carbon-site-kit/carbon-site-kit#readme",
+  "homepage": "https://github.com/Clemsrec/carboncost#readme",
   "dependencies": {
     "@clemsrec/browser": "workspace:*",
     "carbone-cost": "workspace:*"
