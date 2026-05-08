@@ -1,4 +1,4 @@
-# @carbon-site-kit/core
+# carbone-cost
 
 Core estimation helpers and shared types.
 
@@ -15,13 +15,13 @@ Core estimation helpers and shared types.
 ## Install
 
 ```bash
-pnpm add @carbon-site-kit/core
+pnpm add carbone-cost
 ```
 
 ## Example
 
 ```ts
-import { trackPageview, trackAIUsage, aggregateEvents, explain } from "@carbon-site-kit/core";
+import { trackPageview, trackAIUsage, aggregateEvents, explain } from "carbone-cost";
 
 const web = trackPageview({ route: "/", bytesTransferred: 850000 });
 const ai = trackAIUsage({

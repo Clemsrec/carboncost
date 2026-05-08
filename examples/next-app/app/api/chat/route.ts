@@ -1,4 +1,4 @@
-import { createNextCarbon } from "@carbon-site-kit/next";
+import { createNextCarbon } from "@clemsrec/next";
 
 const carbon = createNextCarbon({ endpoint: "https://example.com/api/carbon" });
 

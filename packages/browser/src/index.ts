@@ -1,4 +1,4 @@
-import { trackPageview, type CarbonEvent, type WebPageviewInput } from "@carbon-site-kit/core";
+import { trackPageview, type CarbonEvent, type WebPageviewInput } from "carbone-cost";
 
 export type BrowserSdkConfig = {
   endpoint?: string;

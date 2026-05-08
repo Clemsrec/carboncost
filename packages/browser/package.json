@@ -1,5 +1,5 @@
 {
-  "name": "@carbon-site-kit/browser",
+  "name": "@clemsrec/browser",
   "version": "0.1.0",
   "description": "Lightweight browser SDK for Carbon Site Kit.",
   "type": "module",
@@ -27,7 +27,7 @@
   },
   "homepage": "https://github.com/carbon-site-kit/carbon-site-kit#readme",
   "dependencies": {
-    "@carbon-site-kit/core": "workspace:*"
+    "carbone-cost": "workspace:*"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

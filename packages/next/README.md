@@ -1,18 +1,18 @@
-# @carbon-site-kit/next
+# @clemsrec/next
 
 Practical Next.js adapter for API/route handler integration.
 
 ## Install
 
 ```bash
-pnpm add @carbon-site-kit/next
+pnpm add @clemsrec/next
 ```
 
 ## App Router example
 
 ```ts
 // app/api/carbon/route.ts
-import { createNextCarbon } from "@carbon-site-kit/next";
+import { createNextCarbon } from "@clemsrec/next";
 
 const carbon = createNextCarbon({ endpoint: "https://example.com/carbon" });
 
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
 ## AI usage example
 
 ```ts
-import { createNextCarbon } from "@carbon-site-kit/next";
+import { createNextCarbon } from "@clemsrec/next";
 
 const carbon = createNextCarbon();
 

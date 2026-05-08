@@ -1,11 +1,11 @@
-# @carbon-site-kit/script-tag
+# @clemsrec/script-tag
 
 Script-tag / CDN distribution that exposes `window.CarbonSiteKit`.
 
 ## Install
 
 ```bash
-pnpm add @carbon-site-kit/script-tag
+pnpm add @clemsrec/script-tag
 ```
 
 ## CDN usage

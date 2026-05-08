@@ -25,23 +25,23 @@ Pro features are planned later and are out of scope for this release.
 
 ## Packages
 
-- `@carbon-site-kit/core`
-- `@carbon-site-kit/browser`
-- `@carbon-site-kit/script-tag`
-- `@carbon-site-kit/next`
+- `carbone-cost`
+- `@clemsrec/browser`
+- `@clemsrec/script-tag`
+- `@clemsrec/next`
 
 ## Installation
 
 ### npm / pnpm / yarn
 
 ```bash
-pnpm add @carbon-site-kit/core @carbon-site-kit/browser @carbon-site-kit/next
+pnpm add carbone-cost @clemsrec/browser @clemsrec/next
 ```
 
 Or install only what you need:
 
 ```bash
-pnpm add @carbon-site-kit/core
+pnpm add carbone-cost
 ```
 
 ### Script tag / CDN
@@ -59,7 +59,7 @@ pnpm add @carbon-site-kit/core
 ### Core (Node or browser-safe logic)
 
 ```ts
-import { trackPageview, trackAIUsage, aggregateEvents, explain } from "@carbon-site-kit/core";
+import { trackPageview, trackAIUsage, aggregateEvents, explain } from "carbone-cost";
 
 const webEvent = trackPageview({
   route: "/pricing",
@@ -81,7 +81,7 @@ const methodology = explain();
 ### Browser SDK
 
 ```ts
-import { createCarbonBrowserSdk } from "@carbon-site-kit/browser";
+import { createCarbonBrowserSdk } from "@clemsrec/browser";
 
 const carbon = createCarbonBrowserSdk({
   endpoint: "/api/carbon",
@@ -98,7 +98,7 @@ carbon.trackPageview({
 ### Next.js adapter (App Router)
 
 ```ts
-import { createNextCarbon } from "@carbon-site-kit/next";
+import { createNextCarbon } from "@clemsrec/next";
 
 const carbon = createNextCarbon({ endpoint: "/api/carbon" });
 
@@ -108,7 +108,7 @@ export async function POST(request: Request) {
 ```
 
 ```ts
-import { createNextCarbon } from "@carbon-site-kit/next";
+import { createNextCarbon } from "@clemsrec/next";
 
 const carbon = createNextCarbon();
 

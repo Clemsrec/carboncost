@@ -1,5 +1,5 @@
 {
-  "name": "@carbon-site-kit/core",
+  "name": "carbone-cost",
   "version": "0.1.0",
   "description": "Core estimation and methodology utilities for Carbon Site Kit.",
   "type": "module",

@@ -1,5 +1,5 @@
-import { createCarbonBrowserSdk, type BrowserSdkConfig } from "@carbon-site-kit/browser";
-import { explain, trackAIUsage, type AIUsageInput } from "@carbon-site-kit/core";
+import { createCarbonBrowserSdk, type BrowserSdkConfig } from "@clemsrec/browser";
+import { explain, trackAIUsage, type AIUsageInput } from "carbone-cost";
 
 const sdkState: { sdk: ReturnType<typeof createCarbonBrowserSdk> | null } = {
   sdk: null

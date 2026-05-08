@@ -1,5 +1,5 @@
 {
-  "name": "@carbon-site-kit/next",
+  "name": "@clemsrec/next",
   "version": "0.1.0",
   "description": "Next.js adapter for Carbon Site Kit.",
   "type": "module",
@@ -27,7 +27,7 @@
   },
   "homepage": "https://github.com/carbon-site-kit/carbon-site-kit#readme",
   "dependencies": {
-    "@carbon-site-kit/core": "workspace:*"
+    "carbone-cost": "workspace:*"
   },
   "peerDependencies": {
     "next": ">=14"

@@ -23,16 +23,16 @@ importers:
 
   examples/vanilla:
     dependencies:
-      '@carbon-site-kit/browser':
+      '@clemsrec/browser':
         specifier: workspace:*
         version: link:../../packages/browser
-      '@carbon-site-kit/core':
+      'carbone-cost':
         specifier: workspace:*
         version: link:../../packages/core
 
   packages/browser:
     dependencies:
-      '@carbon-site-kit/core':
+      'carbone-cost':
         specifier: workspace:*
         version: link:../core
 
@@ -40,7 +40,7 @@ importers:
 
   packages/next:
     dependencies:
-      '@carbon-site-kit/core':
+      'carbone-cost':
         specifier: workspace:*
         version: link:../core
       next:
@@ -49,10 +49,10 @@ importers:
 
   packages/script-tag:
     dependencies:
-      '@carbon-site-kit/browser':
+      '@clemsrec/browser':
         specifier: workspace:*
         version: link:../browser
-      '@carbon-site-kit/core':
+      'carbone-cost':
         specifier: workspace:*
         version: link:../core
 

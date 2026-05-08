@@ -1,17 +1,17 @@
-# @carbon-site-kit/browser
+# @clemsrec/browser
 
 Browser SDK for page-level estimation with optional network transport.
 
 ## Install
 
 ```bash
-pnpm add @carbon-site-kit/browser
+pnpm add @clemsrec/browser
 ```
 
 ## Usage
 
 ```ts
-import { createCarbonBrowserSdk } from "@carbon-site-kit/browser";
+import { createCarbonBrowserSdk } from "@clemsrec/browser";
 
 const sdk = createCarbonBrowserSdk({
   endpoint: "/api/carbon",

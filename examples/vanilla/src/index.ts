@@ -1,5 +1,5 @@
-import { createCarbonBrowserSdk } from "@carbon-site-kit/browser";
-import { explain } from "@carbon-site-kit/core";
+import { createCarbonBrowserSdk } from "@clemsrec/browser";
+import { explain } from "carbone-cost";
 
 const sdk = createCarbonBrowserSdk({
   endpoint: "/api/carbon",

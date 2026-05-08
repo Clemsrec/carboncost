@@ -1,4 +1,4 @@
-import { trackAIUsage, trackPageview, type AIUsageInput, type CarbonEvent } from "@carbon-site-kit/core";
+import { trackAIUsage, trackPageview, type AIUsageInput, type CarbonEvent } from "carbone-cost";
 
 export type NextCarbonConfig = {
   endpoint?: string;

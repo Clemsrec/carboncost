@@ -1,6 +1,6 @@
 # next-app example
 
-This folder contains App Router snippets for integrating `@carbon-site-kit/next`.
+This folder contains App Router snippets for integrating `@clemsrec/next`.
 
 ## Example routes
 
