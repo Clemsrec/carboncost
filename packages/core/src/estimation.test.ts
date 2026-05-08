@@ -1,7 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { aggregateEvents, trackAIUsage, trackPageview } from "./index.js";
+import {
+  aggregateEvents,
+  aggregateSession,
+  formatForDisplay,
+  toEquivalents,
+  trackAIUsage,
+  trackPageview
+} from "./index.js";
+import { WEB_METHODOLOGY } from "./methodology.js";
 
 test("trackPageview returns a non-negative estimate", () => {
   const event = trackPageview({ bytesTransferred: 1250000, route: "/" });
@@ -34,4 +42,71 @@ test("aggregateEvents returns totals", () => {
   const result = aggregateEvents(events, { groupBy: "type" });
   assert.equal(result.totalEvents, 2);
   assert.equal(result.buckets.length, 2);
+});
+
+test("formatForDisplay rounds very small values down to zero for UI", () => {
+  const display = formatForDisplay(
+    {
+      gramsCO2e: 0.0004,
+      methodology: WEB_METHODOLOGY,
+      confidence: "benchmarked",
+      assumptions: []
+    },
+    { minDisplayGrams: 0.001 }
+  );
+
+  assert.equal(display.gramsPerView, 0.0004);
+  assert.equal(display.gramsPerViewRounded, 0);
+  assert.equal(display.gramsPerThousandViews, 0.4);
+  assert.equal(display.category, "very-low");
+  assert.equal(display.methodologyVersion, WEB_METHODOLOGY.methodologyVersion);
+});
+
+test("formatForDisplay maps thresholds to display categories", () => {
+  const low = formatForDisplay({
+    gramsCO2e: 0.003,
+    methodology: WEB_METHODOLOGY,
+    confidence: "benchmarked",
+    assumptions: []
+  });
+
+  const medium = formatForDisplay({
+    gramsCO2e: 0.01,
+    methodology: WEB_METHODOLOGY,
+    confidence: "benchmarked",
+    assumptions: []
+  });
+
+  const high = formatForDisplay({
+    gramsCO2e: 0.03,
+    methodology: WEB_METHODOLOGY,
+    confidence: "benchmarked",
+    assumptions: []
+  });
+
+  assert.equal(low.category, "low");
+  assert.equal(medium.category, "medium");
+  assert.equal(high.category, "high");
+});
+
+test("toEquivalents converts grams to phone charges and car km", () => {
+  const equivalents = toEquivalents(160);
+
+  assert.equal(equivalents.phoneCharges, 100);
+  assert.equal(equivalents.carKm, 1.07);
+  assert.equal(equivalents.assumptions.length, 3);
+});
+
+test("aggregateSession returns totals and averages for pageviews", () => {
+  const events = [
+    trackPageview({ bytesTransferred: 1000000, route: "/" }),
+    trackPageview({ bytesTransferred: 2000000, route: "/pricing" })
+  ];
+
+  const session = aggregateSession(events);
+  const expectedAverage = Math.round((session.totalGrams / 2) * 1_000_000) / 1_000_000;
+
+  assert.equal(session.totalViews, 2);
+  assert.ok(session.totalGrams > 0);
+  assert.equal(session.averageGramsPerView, expectedAverage);
 });

@@ -33,6 +33,12 @@
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "pack:core": "cd packages/core && npm pack --json --silent",
+    "pack:browser": "cd packages/browser && npm pack --json --silent",
+    "pack:script-tag": "cd packages/script-tag && npm pack --json --silent",
+    "pack:next": "cd packages/next && npm pack --json --silent",
+    "pack:all": "pnpm run pack:core && pnpm run pack:browser && pnpm run pack:script-tag && pnpm run pack:next",
+    "smoke:pack": "node smoke-tests/run-smoke-pack.mjs",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "changeset publish"

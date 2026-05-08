@@ -59,7 +59,15 @@ pnpm add carbone-cost
 ### Core (Node or browser-safe logic)
 
 ```ts
-import { trackPageview, trackAIUsage, aggregateEvents, explain } from "carbone-cost";
+import {
+  aggregateEvents,
+  aggregateSession,
+  explain,
+  formatForDisplay,
+  toEquivalents,
+  trackAIUsage,
+  trackPageview
+} from "carbone-cost";
 
 const webEvent = trackPageview({
   route: "/pricing",
@@ -75,8 +83,39 @@ const aiEvent = trackAIUsage({
 });
 
 const summary = aggregateEvents([webEvent, aiEvent], { groupBy: "type" });
+const display = formatForDisplay(webEvent.result);
+const session = aggregateSession([webEvent]);
+const equivalents = toEquivalents(session.totalGrams);
 const methodology = explain();
 ```
+
+### UI-friendly helpers
+
+The core package also exposes thin presentation helpers for product surfaces such as footer badges, session summaries, and diagnostic pages.
+
+```ts
+import {
+  aggregateSession,
+  formatForDisplay,
+  toEquivalents,
+  trackPageview
+} from "carbone-cost";
+
+const pageview = trackPageview({
+  route: "/carbon-test",
+  bytesTransferred: 1200000
+});
+
+const badge = formatForDisplay(pageview.result);
+const session = aggregateSession([pageview]);
+const awareness = toEquivalents(session.totalGrams);
+```
+
+- `formatForDisplay()` returns rounded UI values, a simple category, and the methodology version.
+- `aggregateSession()` sums pageview events into a session total and average grams per view.
+- `toEquivalents()` maps grams CO2e to approximate human-readable comparisons such as phone charges and car distance.
+
+These helpers are intended for awareness and reporting consistency. They do not change the underlying estimation formulas.
 
 ### Browser SDK
 

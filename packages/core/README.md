@@ -10,6 +10,9 @@ Core estimation helpers and shared types.
 - `trackPageview()`
 - `trackAIUsage()`
 - `aggregateEvents()`
+- `formatForDisplay()`
+- `toEquivalents()`
+- `aggregateSession()`
 - `explain()`
 
 ## Install
@@ -21,7 +24,15 @@ pnpm add carbone-cost
 ## Example
 
 ```ts
-import { trackPageview, trackAIUsage, aggregateEvents, explain } from "carbone-cost";
+import {
+  aggregateEvents,
+  aggregateSession,
+  explain,
+  formatForDisplay,
+  toEquivalents,
+  trackAIUsage,
+  trackPageview
+} from "carbone-cost";
 
 const web = trackPageview({ route: "/", bytesTransferred: 850000 });
 const ai = trackAIUsage({
@@ -32,8 +43,52 @@ const ai = trackAIUsage({
 });
 
 const summary = aggregateEvents([web, ai], { groupBy: "type" });
+const display = formatForDisplay(web.result);
+const session = aggregateSession([web]);
+const equivalents = toEquivalents(session.totalGrams);
 const details = explain();
 ```
+
+## UI helpers
+
+Use `formatForDisplay()` when you need a stable UI-oriented representation for badges, footers, or lightweight reporting cards.
+
+```ts
+import { formatForDisplay, trackPageview } from "carbone-cost";
+
+const event = trackPageview({ route: "/carbon-test", bytesTransferred: 1200000 });
+const display = formatForDisplay(event.result);
+
+console.log(display.gramsPerViewRounded);
+console.log(display.category);
+```
+
+Use `aggregateSession()` to combine several pageview events into a single session-level indicator.
+
+```ts
+import { aggregateSession, trackPageview } from "carbone-cost";
+
+const session = aggregateSession([
+  trackPageview({ route: "/", bytesTransferred: 900000 }),
+  trackPageview({ route: "/pricing", bytesTransferred: 1300000 })
+]);
+
+console.log(session.totalGrams);
+console.log(session.averageGramsPerView);
+```
+
+Use `toEquivalents()` for awareness-oriented comparisons in UI copy.
+
+```ts
+import { toEquivalents } from "carbone-cost";
+
+const equivalents = toEquivalents(12.5);
+
+console.log(equivalents.phoneCharges);
+console.log(equivalents.carKm);
+```
+
+Equivalents are approximate and intended for communication, not detailed life-cycle assessment.
 
 ## Methodology
 

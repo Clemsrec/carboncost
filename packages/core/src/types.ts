@@ -49,6 +49,9 @@ export type CarbonEvent =
       timestamp: string;
     };
 
+export type WebPageviewEvent = Extract<CarbonEvent, { type: "web.pageview" }>;
+export type AIUsageEvent = Extract<CarbonEvent, { type: "ai.usage" }>;
+
 export type AggregateOptions = {
   groupBy?: "type" | "route" | "model";
 };

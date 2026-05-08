@@ -1,0 +1,15 @@
+{
+  "name": "carbone-smoke-consumer",
+  "version": "1.0.0",
+  "description": "Smoke test consumer for carbone packages",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json",
+    "smoke": "node dist/smoke-runtime.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.29",
+    "typescript": "^5.8.3"
+  }
+}

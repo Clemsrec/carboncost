@@ -17,6 +17,11 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - Changesets-based versioning.
 - Initial examples and documentation.
 
+### Changed
+
+- Added UI-friendly core helpers for formatting carbon results, aggregating pageview sessions, and generating simple awareness equivalents.
+- Added local `npm pack` smoke testing workflow and release documentation to validate published package shape before release.
+
 ## [0.1.0] - 2026-05-08
 
 ### Added

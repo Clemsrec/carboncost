@@ -1,11 +1,13 @@
 import { AI_METHODOLOGY, WEB_METHODOLOGY } from "./methodology.js";
 import type {
   AIUsageInput,
+  AIUsageEvent,
   AggregateBucket,
   AggregateOptions,
   CarbonEvent,
   CarbonResult,
   MethodologyMetadata,
+  WebPageviewEvent,
   WebPageviewInput
 } from "./types.js";
 
@@ -87,7 +89,7 @@ export function estimateAI(input: AIUsageInput): CarbonResult {
   };
 }
 
-export function trackPageview(input: WebPageviewInput): CarbonEvent {
+export function trackPageview(input: WebPageviewInput): WebPageviewEvent {
   return {
     type: "web.pageview",
     input,
@@ -96,7 +98,7 @@ export function trackPageview(input: WebPageviewInput): CarbonEvent {
   };
 }
 
-export function trackAIUsage(input: AIUsageInput): CarbonEvent {
+export function trackAIUsage(input: AIUsageInput): AIUsageEvent {
   return {
     type: "ai.usage",
     input,

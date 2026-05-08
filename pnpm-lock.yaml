@@ -26,13 +26,13 @@ importers:
       '@clemsrec/browser':
         specifier: workspace:*
         version: link:../../packages/browser
-      'carbone-cost':
+      carbone-cost:
         specifier: workspace:*
         version: link:../../packages/core
 
   packages/browser:
     dependencies:
-      'carbone-cost':
+      carbone-cost:
         specifier: workspace:*
         version: link:../core
 
@@ -40,7 +40,7 @@ importers:
 
   packages/next:
     dependencies:
-      'carbone-cost':
+      carbone-cost:
         specifier: workspace:*
         version: link:../core
       next:
@@ -52,7 +52,7 @@ importers:
       '@clemsrec/browser':
         specifier: workspace:*
         version: link:../browser
-      'carbone-cost':
+      carbone-cost:
         specifier: workspace:*
         version: link:../core
 
