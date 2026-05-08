@@ -1,0 +1,38 @@
+{
+  "name": "@carbon-site-kit/browser",
+  "version": "0.1.0",
+  "description": "Lightweight browser SDK for Carbon Site Kit.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "sideEffects": false,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/carbon-site-kit/carbon-site-kit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/carbon-site-kit/carbon-site-kit/issues"
+  },
+  "homepage": "https://github.com/carbon-site-kit/carbon-site-kit#readme",
+  "dependencies": {
+    "@carbon-site-kit/core": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test"
+  }
+}

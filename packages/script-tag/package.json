@@ -1,0 +1,32 @@
+{
+  "name": "@carbon-site-kit/script-tag",
+  "version": "0.1.0",
+  "description": "Script-tag / CDN global bundle for Carbon Site Kit.",
+  "type": "module",
+  "main": "./dist/carbon-site-kit.min.js",
+  "module": "./dist/carbon-site-kit.min.js",
+  "types": "./src/index.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/carbon-site-kit/carbon-site-kit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/carbon-site-kit/carbon-site-kit/issues"
+  },
+  "homepage": "https://github.com/carbon-site-kit/carbon-site-kit#readme",
+  "dependencies": {
+    "@carbon-site-kit/browser": "workspace:*",
+    "@carbon-site-kit/core": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsup --config tsup.config.ts",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test"
+  }
+}

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Discussions
+    url: https://github.com/carbon-site-kit/carbon-site-kit/discussions
+    about: Ask questions and share ideas in Discussions.
