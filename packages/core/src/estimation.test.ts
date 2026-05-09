@@ -89,12 +89,15 @@ test("formatForDisplay maps thresholds to display categories", () => {
   assert.equal(high.category, "high");
 });
 
-test("toEquivalents converts grams to phone charges and car km", () => {
+test("toEquivalents converts grams to multiple human-readable equivalents", () => {
   const equivalents = toEquivalents(160);
 
   assert.equal(equivalents.phoneCharges, 100);
   assert.equal(equivalents.carKm, 1.07);
-  assert.equal(equivalents.assumptions.length, 3);
+  assert.equal(equivalents.trainKm, 11.43);
+  assert.equal(equivalents.ledBulbHours, 40);
+  assert.equal(equivalents.laptopCharges, 4.85);
+  assert.equal(equivalents.assumptions.length, 6);
 });
 
 test("aggregateSession returns totals and averages for pageviews", () => {

@@ -115,6 +115,8 @@ const awareness = toEquivalents(session.totalGrams);
 - `aggregateSession()` sums pageview events into a session total and average grams per view.
 - `toEquivalents()` maps grams CO2e to approximate human-readable comparisons such as phone charges and car distance.
 
+The core package also exposes `diagnose(config, recentEvents)` to produce integration coverage diagnostics (`covered`, `partial`, `missing`, `unknown`) for web, API, AI, and hosting dimensions.
+
 These helpers are intended for awareness and reporting consistency. They do not change the underlying estimation formulas.
 
 ### Browser SDK

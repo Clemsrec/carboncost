@@ -16,6 +16,8 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - GitHub Actions CI and release workflow.
 - Changesets-based versioning.
 - Initial examples and documentation.
+- Core diagnostics helper `diagnose(config, recentEvents)` with explicit coverage statuses for web, API, AI, hosting, and client-device scope.
+- Next.js integration example page at `/carbon-diagnostics` with environment-based enablement and optional secret-based access guard.
 
 ### Changed
 

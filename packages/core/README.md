@@ -13,6 +13,7 @@ Core estimation helpers and shared types.
 - `formatForDisplay()`
 - `toEquivalents()`
 - `aggregateSession()`
+- `diagnose()`
 - `explain()`
 
 ## Install
@@ -86,9 +87,39 @@ const equivalents = toEquivalents(12.5);
 
 console.log(equivalents.phoneCharges);
 console.log(equivalents.carKm);
+console.log(equivalents.trainKm);
+console.log(equivalents.ledBulbHours);
+console.log(equivalents.laptopCharges);
 ```
 
 Equivalents are approximate and intended for communication, not detailed life-cycle assessment.
+
+## Coverage diagnostics
+
+Use `diagnose()` to generate a transparent coverage view for what your integration currently measures.
+
+```ts
+import { diagnose, type DiagnosticsConfig, type AnyEvent } from "carbone-cost";
+
+const config: DiagnosticsConfig = {
+  expectsApiTracking: true,
+  expectsAiTracking: false,
+  hostingProvider: "vercel",
+  region: "fra1",
+  greenHosting: true
+};
+
+const recentEvents: AnyEvent[] = [
+  { type: "web.pageview", input: { bytesTransferred: 1200000 } },
+  { type: "web.pageview", input: { bytesTransferred: 980000 } }
+];
+
+const report = diagnose(config, recentEvents);
+console.log(report.webPageviews.status);
+console.log(report.clientDevice.notes);
+```
+
+The diagnostics report is high-level and intentionally explicit about missing or unknown dimensions.
 
 ## Methodology
 

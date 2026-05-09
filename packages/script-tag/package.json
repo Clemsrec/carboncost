@@ -1,6 +1,6 @@
 {
   "name": "@clemsrec/script-tag",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Script-tag / CDN global bundle for Carbon Site Kit.",
   "type": "module",
   "main": "./dist/carbon-site-kit.min.js",

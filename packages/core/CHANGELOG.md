@@ -1,5 +1,21 @@
 # carbone-cost
 
+## 0.4.0
+
+### Minor Changes
+
+- Add a diagnostics layer to the core package with `diagnose(config, recentEvents)` and exported coverage types.
+
+  This introduces transparent coverage statuses (`covered`, `partial`, `missing`, `unknown`) for:
+
+  - web pageviews
+  - API calls
+  - AI inference usage
+  - hosting metadata
+  - client-device scope disclaimer
+
+  Also adds tests and README examples for diagnostics usage.
+
 ## 0.3.0
 
 ### Minor Changes
@@ -20,6 +36,8 @@
 - Added `aggregateSession()` to compute total and average grams CO2e across pageview events.
 - Added `toEquivalents()` to convert grams CO2e into approximate phone charge and car distance equivalents for awareness-oriented displays.
 - Added focused tests and README examples for the new helper layer.
+- Added `diagnose()` to compute integration coverage diagnostics with explicit `covered` / `partial` / `missing` / `unknown` statuses.
+- Added diagnostics types: `CoverageStatus`, `CoverageDimension`, `CoverageReport`, `DiagnosticsConfig`, and `AnyEvent`.
 
 ## 0.2.1
 

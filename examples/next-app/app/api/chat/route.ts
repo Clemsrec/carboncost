@@ -1,4 +1,5 @@
 import { createNextCarbon } from "@clemsrec/next";
+import { addRecentEvent } from "../../../lib/carbon-events";
 
 const carbon = createNextCarbon({ endpoint: "https://example.com/api/carbon" });
 
@@ -9,6 +10,8 @@ export async function POST() {
     promptTokens: 1200,
     completionTokens: 420
   });
+
+  addRecentEvent(event);
 
   await carbon.sendEvent(event);
 
