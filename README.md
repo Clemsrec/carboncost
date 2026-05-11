@@ -113,11 +113,78 @@ const awareness = toEquivalents(session.totalGrams);
 
 - `formatForDisplay()` returns rounded UI values, a simple category, and the methodology version.
 - `aggregateSession()` sums pageview events into a session total and average grams per view.
-- `toEquivalents()` maps grams CO2e to approximate human-readable comparisons such as phone charges and car distance.
+- `toEquivalents()` maps grams CO2e to approximate comparisons and now returns both raw values and UI-ready display strings.
+
+Quick example:
+
+```ts
+const eq = toEquivalents(8.4);
+
+console.log(eq.trainKm); // raw numeric value
+console.log(eq.trainKmDisplay); // UI-ready string
+console.log(eq.phoneChargesDisplay);
+```
+
+Display fields are approximate and intended for awareness. Use raw fields if you need custom formatting or localization.
 
 The core package also exposes `diagnose(config, recentEvents)` to produce integration coverage diagnostics (`covered`, `partial`, `missing`, `unknown`) for web, API, AI, and hosting dimensions.
 
 These helpers are intended for awareness and reporting consistency. They do not change the underlying estimation formulas.
+
+## External consumer example (Next.js)
+
+```bash
+pnpm create next-app@latest carbone-consumer --ts --app
+cd carbone-consumer
+pnpm add carbone-cost
+```
+
+Create `app/carbon-test/page.tsx`:
+
+```tsx
+import {
+  diagnose,
+  formatForDisplay,
+  toEquivalents,
+  trackPageview,
+  type AnyEvent,
+  type DiagnosticsConfig
+} from "carbone-cost";
+
+export default function CarbonTestPage() {
+  const pageview = trackPageview({ route: "/carbon-test", bytesTransferred: 1_200_000 });
+  const display = formatForDisplay(pageview.result);
+  const eq = toEquivalents(pageview.result.gramsCO2e);
+
+  const config: DiagnosticsConfig = {
+    expectsApiTracking: true,
+    expectsAiTracking: false,
+    hostingProvider: "vercel",
+    region: "fra1",
+    greenHosting: true
+  };
+
+  const recentEvents: AnyEvent[] = [
+    { type: "web.pageview", input: { route: "/carbon-test", bytesTransferred: 1_200_000 } }
+  ];
+
+  const report = diagnose(config, recentEvents);
+
+  return (
+    <main style={{ padding: 24, fontFamily: "sans-serif" }}>
+      <p>Raw estimate: {pageview.result.gramsCO2e} gCO2e</p>
+      <p>Rounded display: {display.gramsPerViewRounded} gCO2e</p>
+      <p>Category: {display.category}</p>
+      <p>Equivalents: {eq.trainKmDisplay}, {eq.phoneChargesDisplay}</p>
+      <p>Diagnostics summary: web={report.webPageviews.status}, api={report.webApiCalls.status}</p>
+    </main>
+  );
+}
+```
+
+## Troubleshooting (pnpm scaffold workspace)
+
+If a fresh scaffold fails on `pnpm add` with an invalid workspace definition, inspect `pnpm-workspace.yaml`. Some scaffolds may generate an empty or invalid `packages` field. This is unrelated to `carbone-cost`.
 
 ### Browser SDK
 

@@ -23,6 +23,8 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 - Added UI-friendly core helpers for formatting carbon results, aggregating pageview sessions, and generating simple awareness equivalents.
 - Added local `npm pack` smoke testing workflow and release documentation to validate published package shape before release.
+- Enhanced `toEquivalents()` DX with UI-ready display fields (`phoneChargesDisplay`, `laptopChargesDisplay`, `trainKmDisplay`, `ledBulbHoursDisplay`) while preserving raw numeric values.
+- Added documented external Next.js consumer example and a short pnpm workspace scaffold troubleshooting note.
 
 ## [0.1.0] - 2026-05-08
 

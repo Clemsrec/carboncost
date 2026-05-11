@@ -97,7 +97,32 @@ test("toEquivalents converts grams to multiple human-readable equivalents", () =
   assert.equal(equivalents.trainKm, 11.43);
   assert.equal(equivalents.ledBulbHours, 40);
   assert.equal(equivalents.laptopCharges, 4.85);
+  assert.equal(equivalents.phoneChargesDisplay, "100 charge");
+  assert.equal(equivalents.trainKmDisplay, "11.43 km");
+  assert.equal(equivalents.ledBulbHoursDisplay, "40 h");
+  assert.equal(equivalents.laptopChargesDisplay, "4.9 charge");
   assert.equal(equivalents.assumptions.length, 6);
+});
+
+test("toEquivalents formats near-zero charge and hour displays", () => {
+  const equivalents = toEquivalents(0.05);
+
+  assert.equal(equivalents.phoneChargesDisplay, "< 0.1 charge");
+  assert.equal(equivalents.laptopChargesDisplay, "< 0.1 charge");
+  assert.equal(equivalents.ledBulbHoursDisplay, "< 0.1 h");
+});
+
+test("toEquivalents formats sub-kilometer train distances in meters", () => {
+  const equivalents = toEquivalents(4.5);
+
+  assert.equal(equivalents.trainKm, 0.32);
+  assert.equal(equivalents.trainKmDisplay, "320 m");
+});
+
+test("toEquivalents formats tiny train distances as less than one meter", () => {
+  const equivalents = toEquivalents(0.01);
+
+  assert.equal(equivalents.trainKmDisplay, "< 1 m");
 });
 
 test("aggregateSession returns totals and averages for pageviews", () => {

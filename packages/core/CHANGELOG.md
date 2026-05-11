@@ -1,5 +1,35 @@
 # carbone-cost
 
+## 0.4.1
+
+### Patch Changes
+
+- Improve developer experience for `toEquivalents()` by adding UI-ready display fields while preserving all existing raw numeric fields.
+
+  Added display fields:
+
+  - `phoneChargesDisplay`
+  - `laptopChargesDisplay`
+  - `trainKmDisplay`
+  - `ledBulbHoursDisplay`
+
+  Also updates docs with an external Next.js consumer example and a short pnpm workspace troubleshooting note.
+
+## 0.4.1
+
+### Patch Changes
+
+- Improve `toEquivalents()` developer experience by adding UI-ready display fields while keeping all raw numeric fields unchanged.
+
+  Added display fields:
+
+  - `phoneChargesDisplay`
+  - `laptopChargesDisplay`
+  - `trainKmDisplay`
+  - `ledBulbHoursDisplay`
+
+  Also adds tests and documentation for near-zero display handling and sub-kilometer train formatting.
+
 ## 0.4.0
 
 ### Minor Changes
