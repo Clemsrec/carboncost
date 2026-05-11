@@ -131,6 +131,41 @@ The core package also exposes `diagnose(config, recentEvents)` to produce integr
 
 These helpers are intended for awareness and reporting consistency. They do not change the underlying estimation formulas.
 
+## Release story: 0.4.x
+
+**0.4.0** introduced the diagnostics layer:
+- `diagnose(config, recentEvents)` for transparent coverage analysis
+- Explicit status badges: `covered`, `partial`, `missing`, `unknown`
+- Coverage dimensions: web pageviews, API calls, AI usage, hosting, client device
+- Support for `/carbon-diagnostics` pages in Next.js
+
+**0.4.1** polished developer experience:
+- `toEquivalents()` now returns both raw numeric values and UI-ready display strings
+- Examples: `trainKmDisplay: "11.43 km"`, `phoneChargesDisplay: "4.9 charge"`
+- Improved external consumer documentation with real Next.js example
+- Validated in fresh npm-only and pnpm-only setups
+
+## What this package does and does not do
+
+### What it does
+
+- Estimates website carbon footprint from pageview activity (bytes transferred, route)
+- Estimates AI usage carbon footprint from token counts (model, provider, prompt/completion tokens)
+- Aggregates events into session or batch summaries
+- Exposes coverage diagnostics when you provide tracking events for web, API, AI, and hosting
+- Provides human-readable equivalents for awareness (phone charges, train distance, LED hours, etc.)
+- Returns both raw numeric values and UI-friendly display strings
+
+### What it does not do
+
+- It does not automatically discover backend services, APIs, or infrastructure without integration hooks
+- It does not provide a comprehensive corporate carbon inventory or Scope 3 reporting
+- It does not claim exact end-to-end physical emissions for your entire application stack
+- It does not track unmeasured activities (e.g., database queries, caching behavior) unless you explicitly instrument them
+- It depends on available activity data and methodology assumptions, which are approximate
+
+The package is intended for **directional tracking and awareness**, not formal LCA or compliance reporting.
+
 ## External consumer example (Next.js)
 
 ```bash
@@ -182,11 +217,16 @@ export default function CarbonTestPage() {
 }
 ```
 
-## Troubleshooting (pnpm scaffold workspace)
+## Tooling notes
 
-If a fresh scaffold fails on `pnpm add` with an invalid workspace definition, inspect `pnpm-workspace.yaml`. Some scaffolds may generate an empty or invalid `packages` field. This is unrelated to `carbone-cost`.
+**Installation and package manager compatibility:**
 
-### Browser SDK
+- carbone-cost has been validated in fresh npm-only and pnpm monorepo setups
+- `pnpm` users: if a newly scaffolded app includes an auto-generated `pnpm-workspace.yaml` with empty or invalid `packages` field, installation may fail due to workspace tooling—not due to carbone-cost itself
+- If you encounter workspace resolution errors, inspect your `pnpm-workspace.yaml` and ensure it correctly lists your package directories or remove it if your app is not a monorepo
+- Avoid mixing multiple package managers in the same repository unless you have an explicit workspace configuration
+
+## Methodology disclaimer
 
 ```ts
 import { createCarbonBrowserSdk } from "@clemsrec/browser";
