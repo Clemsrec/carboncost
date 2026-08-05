@@ -89,6 +89,35 @@ const equivalents = toEquivalents(session.totalGrams);
 const methodology = explain();
 ```
 
+### AI model factors
+
+Token factors are resolved in three steps, and the `confidence` field on the
+result tells you which one was used:
+
+1. **Your own factor** — pass `factorGPer1kTokens` on the input to override
+   everything. Reported as `benchmarked`.
+2. **Known model** — an entry in the built-in table. Model names are normalized
+   first, so `gpt-4o-mini-2024-07-18` resolves to the `gpt-4o-mini` factor.
+   Reported as `benchmarked`.
+3. **Size tier** — unknown models are bucketed by the size qualifier in their
+   name (`mini`/`nano`/`haiku`/`flash` → small, `opus`/`pro`/`large`/`ultra` →
+   large, otherwise medium). This is a naming heuristic, not a measurement, and
+   is always reported as `estimated`.
+
+Step 3 exists so that a model released after this package was published still
+gets a sensible order of magnitude instead of one flat default. When accuracy
+matters, supply your own factor:
+
+```ts
+const event = trackAIUsage({
+  provider: "other",
+  model: "in-house-llm",
+  promptTokens: 1200,
+  completionTokens: 400,
+  factorGPer1kTokens: 0.31
+});
+```
+
 ### UI-friendly helpers
 
 The core package also exposes thin presentation helpers for product surfaces such as footer badges, session summaries, and diagnostic pages.
@@ -226,7 +255,9 @@ export default function CarbonTestPage() {
 - If you encounter workspace resolution errors, inspect your `pnpm-workspace.yaml` and ensure it correctly lists your package directories or remove it if your app is not a monorepo
 - Avoid mixing multiple package managers in the same repository unless you have an explicit workspace configuration
 
-## Methodology disclaimer
+## Framework adapters
+
+### Browser SDK
 
 ```ts
 import { createCarbonBrowserSdk } from "@clemsrec/browser";
@@ -246,14 +277,26 @@ carbon.trackPageview({
 ### Next.js adapter (App Router)
 
 ```ts
+// app/api/carbon/route.ts
 import { createNextCarbon } from "@clemsrec/next";
 
-const carbon = createNextCarbon({ endpoint: "/api/carbon" });
+const carbon = createNextCarbon({
+  // Called once per accepted event. This is where you persist or forward it —
+  // collectHandler validates the payload but stores nothing by itself.
+  onEvent: async (event) => {
+    await saveToYourStore(event);
+  }
+});
 
 export async function POST(request: Request) {
   return carbon.collectHandler(request);
 }
 ```
+
+`collectHandler` responds `405` to non-POST, `413` above `maxBodyBytes` (64 KB by
+default), `400` on malformed JSON or an unsupported event type, `500` if your
+`onEvent` throws, and `200 {"ok":true}` otherwise. It accepts both the
+`{ event }` envelope sent by the browser SDK and a bare event object.
 
 ```ts
 import { createNextCarbon } from "@clemsrec/next";
