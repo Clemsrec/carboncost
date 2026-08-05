@@ -32,7 +32,7 @@
     "lint": "pnpm -r run lint",
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "check": "pnpm build && pnpm lint && pnpm typecheck && pnpm test",
     "pack:core": "cd packages/core && npm pack --json --silent",
     "pack:browser": "cd packages/browser && npm pack --json --silent",
     "pack:script-tag": "cd packages/script-tag && npm pack --json --silent",

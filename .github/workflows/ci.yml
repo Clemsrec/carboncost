@@ -25,6 +25,12 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # Build first: packages resolve their workspace dependencies through
+      # dist/*.d.ts, which does not exist on a fresh checkout. Linting before
+      # building fails with TS2307 on every dependent package.
+      - name: Build
+        run: pnpm build
+
       - name: Lint
         run: pnpm lint
 
@@ -33,6 +39,3 @@ jobs:
 
       - name: Test
         run: pnpm test
-
-      - name: Build
-        run: pnpm build
