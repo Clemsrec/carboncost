@@ -13,6 +13,15 @@ import type {
 
 const WEB_GRAMS_PER_GB = 0.5;
 
+const GREEN_HOSTING_MULTIPLIER = 0.5;
+
+/**
+ * Known per-model factors, in grams of CO2e per 1,000 tokens.
+ *
+ * Keys are `provider:model` after normalization (lowercase, trailing version or
+ * date suffix removed), so `gpt-4o-mini-2024-07-18` resolves to `openai:gpt-4o-mini`.
+ * A hit here is reported with confidence `benchmarked`.
+ */
 const AI_MODEL_FACTORS_G_PER_1K_TOKENS: Record<string, number> = {
   "openai:gpt-4o": 0.42,
   "openai:gpt-4o-mini": 0.09,
@@ -21,29 +30,113 @@ const AI_MODEL_FACTORS_G_PER_1K_TOKENS: Record<string, number> = {
   "mistral:mistral-large": 0.25
 };
 
-const AI_DEFAULT_FACTOR_G_PER_1K_TOKENS = 0.2;
+/**
+ * Size-class fallback for models absent from the table above.
+ *
+ * Model names go stale fast, so instead of a hardcoded list that rots, unknown
+ * models are bucketed by the size qualifier vendors put in the name. This is a
+ * naming-convention heuristic, not a measurement: results are always reported
+ * with confidence `estimated`.
+ */
+export type AIModelTier = "small" | "medium" | "large";
+
+const AI_TIER_FACTORS_G_PER_1K_TOKENS: Record<AIModelTier, number> = {
+  small: 0.09,
+  medium: 0.2,
+  large: 0.42
+};
+
+const SMALL_TIER_HINTS = new Set(["mini", "nano", "small", "lite", "haiku", "flash", "tiny"]);
+const LARGE_TIER_HINTS = new Set(["opus", "ultra", "large", "pro", "max", "heavy"]);
 
 function round(value: number, precision = 6): number {
   const scale = 10 ** precision;
   return Math.round(value * scale) / scale;
 }
 
+/**
+ * Strips casing plus trailing date/version suffixes: `-2024-08-06`, `-20250514`,
+ * `@2.1`, `:v3`. Keeps the family name that the factor table is keyed on.
+ */
+function normalizeModelName(model: string): string {
+  return model
+    .trim()
+    .toLowerCase()
+    .replace(/[@:]v?[\d.]+$/, "")
+    .replace(/-\d{4}-\d{2}-\d{2}$/, "")
+    .replace(/-\d{6,8}$/, "")
+    .replace(/-latest$/, "");
+}
+
+export function resolveModelTier(model: string): AIModelTier {
+  // Match whole segments, never substrings: "gemini" contains "mini" but is not
+  // a small model.
+  const segments = normalizeModelName(model).split(/[^a-z0-9]+/).filter(Boolean);
+
+  if (segments.some((segment) => SMALL_TIER_HINTS.has(segment))) {
+    return "small";
+  }
+
+  if (segments.some((segment) => LARGE_TIER_HINTS.has(segment))) {
+    return "large";
+  }
+
+  return "medium";
+}
+
+type ResolvedFactor = {
+  factor: number;
+  confidence: CarbonResult["confidence"];
+  source: "override" | "model-table" | "size-tier";
+  tier?: AIModelTier;
+};
+
+function resolveAIFactor(input: AIUsageInput): ResolvedFactor {
+  if (typeof input.factorGPer1kTokens === "number" && input.factorGPer1kTokens >= 0) {
+    return {
+      factor: input.factorGPer1kTokens,
+      confidence: "benchmarked",
+      source: "override"
+    };
+  }
+
+  const key = `${input.provider}:${normalizeModelName(input.model)}`;
+  const known = AI_MODEL_FACTORS_G_PER_1K_TOKENS[key];
+
+  if (known !== undefined) {
+    return { factor: known, confidence: "benchmarked", source: "model-table" };
+  }
+
+  const tier = resolveModelTier(input.model);
+
+  return {
+    factor: AI_TIER_FACTORS_G_PER_1K_TOKENS[tier],
+    confidence: "estimated",
+    source: "size-tier",
+    tier
+  };
+}
+
 export function estimateWeb(input: WebPageviewInput): CarbonResult {
   const bytes = Math.max(0, input.bytesTransferred);
   const gigaBytes = bytes / (1024 * 1024 * 1024);
 
-  const greenMultiplier =
-    input.greenHosting === true ? 0.5 : input.greenHosting === false ? 1 : 1;
+  // Only an explicit boolean is a hosting signal. `"unknown"` and an omitted
+  // field both mean "we were told nothing", and must not be reported as benchmarked.
+  const hasHostingSignal = typeof input.greenHosting === "boolean";
+  const greenMultiplier = input.greenHosting === true ? GREEN_HOSTING_MULTIPLIER : 1;
 
   const gramsCO2e = round(gigaBytes * WEB_GRAMS_PER_GB * greenMultiplier);
 
   return {
     gramsCO2e,
     methodology: WEB_METHODOLOGY,
-    confidence: input.greenHosting === "unknown" ? "estimated" : "benchmarked",
+    confidence: hasHostingSignal ? "benchmarked" : "estimated",
     assumptions: [
       "Uses a fixed grams-per-GB coefficient for web delivery.",
-      "Uses optional green hosting adjustment when provided."
+      hasHostingSignal
+        ? `Applies a ${GREEN_HOSTING_MULTIPLIER}x multiplier for green hosting when declared.`
+        : "No hosting signal provided, so no green hosting adjustment was applied."
     ],
     breakdown: {
       bytesTransferred: bytes,
@@ -62,19 +155,26 @@ export function estimateAI(input: AIUsageInput): CarbonResult {
   const totalTokens = promptTokens + completionTokens;
   const uncachedTokens = Math.max(0, totalTokens - cachedTokens);
 
-  const key = `${input.provider}:${input.model}`;
-  const factor = AI_MODEL_FACTORS_G_PER_1K_TOKENS[key] ?? AI_DEFAULT_FACTOR_G_PER_1K_TOKENS;
+  const resolved = resolveAIFactor(input);
+  const factor = resolved.factor;
 
   const gramsUncached = (uncachedTokens / 1000) * factor;
   const gramsCached = (cachedTokens / 1000) * factor * 0.1;
   const gramsCO2e = round(gramsUncached + gramsCached);
 
+  const factorAssumption =
+    resolved.source === "override"
+      ? "Uses the caller-supplied token factor in grams per 1k tokens."
+      : resolved.source === "model-table"
+        ? "Uses a known per-model token factor in grams per 1k tokens."
+        : `Model is unknown, so a ${resolved.tier} size-tier factor was applied as a fallback.`;
+
   return {
     gramsCO2e,
     methodology: AI_METHODOLOGY,
-    confidence: AI_MODEL_FACTORS_G_PER_1K_TOKENS[key] ? "benchmarked" : "estimated",
+    confidence: resolved.confidence,
     assumptions: [
-      "Uses model token factor in grams per 1k tokens.",
+      factorAssumption,
       "Cached tokens use a reduced factor (10% of uncached)."
     ],
     breakdown: {

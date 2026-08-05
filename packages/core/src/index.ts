@@ -6,8 +6,10 @@ export * from "./diagnostics.js";
 export {
   estimateWeb,
   estimateAI,
+  resolveModelTier,
   trackPageview,
   trackAIUsage,
   aggregateEvents,
-  explain
+  explain,
+  type AIModelTier
 } from "./estimation.js";

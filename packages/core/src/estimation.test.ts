@@ -4,7 +4,10 @@ import assert from "node:assert/strict";
 import {
   aggregateEvents,
   aggregateSession,
+  estimateAI,
+  estimateWeb,
   formatForDisplay,
+  resolveModelTier,
   toEquivalents,
   trackAIUsage,
   trackPageview
@@ -15,6 +18,68 @@ test("trackPageview returns a non-negative estimate", () => {
   const event = trackPageview({ bytesTransferred: 1250000, route: "/" });
   assert.equal(event.type, "web.pageview");
   assert.ok(event.result.gramsCO2e >= 0);
+});
+
+test("estimateWeb only claims benchmarked confidence with an explicit hosting signal", () => {
+  const omitted = estimateWeb({ bytesTransferred: 1000000 });
+  const unknown = estimateWeb({ bytesTransferred: 1000000, greenHosting: "unknown" });
+  const declared = estimateWeb({ bytesTransferred: 1000000, greenHosting: false });
+
+  assert.equal(omitted.confidence, "estimated");
+  assert.equal(unknown.confidence, "estimated");
+  assert.equal(declared.confidence, "benchmarked");
+});
+
+test("estimateWeb halves the estimate for declared green hosting", () => {
+  const grey = estimateWeb({ bytesTransferred: 1000000, greenHosting: false });
+  const green = estimateWeb({ bytesTransferred: 1000000, greenHosting: true });
+
+  assert.equal(green.gramsCO2e, grey.gramsCO2e / 2);
+});
+
+test("estimateAI resolves dated model names back to their known factor", () => {
+  const dated = estimateAI({
+    provider: "openai",
+    model: "GPT-4o-mini-2024-07-18",
+    promptTokens: 1000,
+    completionTokens: 0
+  });
+
+  assert.equal(dated.confidence, "benchmarked");
+  assert.equal(dated.breakdown?.factorGPer1kTokens, 0.09);
+});
+
+test("estimateAI falls back to a size tier for unknown models", () => {
+  const large = estimateAI({
+    provider: "anthropic",
+    model: "claude-opus-9",
+    promptTokens: 1000,
+    completionTokens: 0
+  });
+
+  assert.equal(large.confidence, "estimated");
+  assert.equal(large.breakdown?.factorGPer1kTokens, 0.42);
+});
+
+test("estimateAI honours a caller-supplied factor", () => {
+  const custom = estimateAI({
+    provider: "other",
+    model: "in-house-llm",
+    promptTokens: 2000,
+    completionTokens: 0,
+    factorGPer1kTokens: 1
+  });
+
+  assert.equal(custom.confidence, "benchmarked");
+  assert.equal(custom.gramsCO2e, 2);
+});
+
+test("resolveModelTier buckets models by their size qualifier", () => {
+  assert.equal(resolveModelTier("gemini-3-flash"), "small");
+  assert.equal(resolveModelTier("claude-haiku-4-5"), "small");
+  assert.equal(resolveModelTier("gemini-2.5-pro"), "large");
+  assert.equal(resolveModelTier("mistral-large-latest"), "large");
+  assert.equal(resolveModelTier("some-unlabelled-model"), "medium");
 });
 
 test("trackAIUsage returns a non-negative estimate", () => {

@@ -31,6 +31,12 @@ export type AIUsageInput = {
   promptTokens: number;
   completionTokens: number;
   cachedTokens?: number;
+  /**
+   * Optional override, in grams of CO2e per 1,000 tokens. Use it when you have a
+   * factor you trust more than the built-in ones (provider disclosure, internal
+   * measurement, a research paper). It bypasses model lookup entirely.
+   */
+  factorGPer1kTokens?: number;
   timestamp?: string;
   metadata?: Record<string, unknown>;
 };
