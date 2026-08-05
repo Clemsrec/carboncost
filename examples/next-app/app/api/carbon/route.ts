@@ -1,19 +1,14 @@
 import { createNextCarbon } from "@clemsrec/next";
 import { addRecentEvent } from "../../../lib/carbon-events";
-import type { AnyEvent } from "carbone-cost";
 
-const carbon = createNextCarbon();
+// `onEvent` receives events the handler has already validated, so the route no
+// longer needs to clone and re-parse the request body itself.
+const carbon = createNextCarbon({
+  onEvent: (event) => {
+    addRecentEvent(event);
+  }
+});
 
 export async function POST(request: Request) {
-  const clonedRequest = request.clone();
-  try {
-    const body = (await clonedRequest.json()) as AnyEvent;
-    if (body && typeof body === "object" && typeof body.type === "string") {
-      addRecentEvent(body);
-    }
-  } catch {
-    // Ignore invalid bodies and keep collection handler behavior unchanged.
-  }
-
   return carbon.collectHandler(request);
 }
