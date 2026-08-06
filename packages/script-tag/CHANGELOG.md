@@ -1,5 +1,13 @@
 # @clemsrec/script-tag
 
+## 0.2.10
+
+### Patch Changes
+
+- Updated dependencies [5f76008]
+  - carbone-cost@0.9.1
+  - @clemsrec/browser@0.2.10
+
 ## 0.2.9
 
 ### Patch Changes
