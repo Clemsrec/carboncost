@@ -12,6 +12,7 @@ interface FakeEntry {
   encodedBodySize: number;
   decodedBodySize: number;
   responseStatus?: number;
+  deliveryType?: string;
 }
 
 /**
@@ -144,7 +145,50 @@ test("the document is billed to the route in its own URL, not the open one", asy
   }
 });
 
-test("the navigation entry is counted once across soft navigations", async () => {
+test("revisiting a route opens a separate measurement instead of repeating the first", () => {
+  const navigation = entry({ name: `${ORIGIN}/`, transferSize: 34_999 });
+  const browser = withFakeBrowser(navigation);
+
+  try {
+    const collector = observePage({ onMeasure: () => {}, debounceMs: 1 });
+    running = collector;
+
+    collector.setRoute("/");
+    browser.advanceClock(500);
+    collector.setRoute("/petitions");
+    browser.deliver([entry({ startTime: 600, transferSize: 7_131 })]);
+    browser.advanceClock(900);
+    collector.setRoute("/");
+    browser.deliver([entry({ startTime: 950, transferSize: 1_200 })]);
+
+    const all = collector.readAll();
+
+    // Three openings, three measurements. Keying by route name made the second
+    // visit re-emit the first one's running total and inflated the session.
+    assert.equal(all.length, 3);
+    assert.deepEqual(
+      all.map((m) => [m.route, m.bytesTransferred]),
+      [
+        ["/", 34_999],
+        ["/petitions", 7_131],
+        ["/", 1_200]
+      ]
+    );
+
+    // The session total is the real one, not the first visit counted twice.
+    assert.equal(
+      all.reduce((sum, m) => sum + m.bytesTransferred, 0),
+      43_330
+    );
+
+    // And coming back is visibly cheaper, which deduplicating by route hides.
+    assert.ok(all[2]!.bytesTransferred < all[0]!.bytesTransferred);
+  } finally {
+    browser.restore();
+  }
+});
+
+test("the navigation entry is counted once, on its own route", () => {
   const navigation = entry({ name: `${ORIGIN}/`, transferSize: 34_999 });
   const browser = withFakeBrowser(navigation);
 
@@ -158,7 +202,41 @@ test("the navigation entry is counted once across soft navigations", async () =>
     browser.advanceClock(900);
     collector.setRoute("/");
 
-    assert.equal(collector.read("/")?.bytesTransferred, 34_999);
+    const total = collector
+      .readAll()
+      .reduce((sum, measurement) => sum + measurement.bytesTransferred, 0);
+
+    assert.equal(total, 34_999);
+  } finally {
+    browser.restore();
+  }
+});
+
+test("a Chromium cache hit is counted as cached even though it reports bytes", () => {
+  const browser = withFakeBrowser();
+
+  try {
+    const collector = observePage({ onMeasure: () => {}, debounceMs: 1 });
+    running = collector;
+    collector.setRoute("/");
+
+    browser.deliver([
+      // Chromium: a flat ~300 bytes with deliveryType "cache".
+      entry({ transferSize: 300, encodedBodySize: 1350, decodedBodySize: 3610, deliveryType: "cache" }),
+      entry({ transferSize: 300, encodedBodySize: 900, decodedBodySize: 2400, deliveryType: "cache" }),
+      // A real network fetch reports an empty deliveryType.
+      entry({ transferSize: 5_000, encodedBodySize: 4_800, decodedBodySize: 12_000, deliveryType: "" }),
+      // An engine without deliveryType, reporting a true zero transfer.
+      entry({ transferSize: 0, encodedBodySize: 2_048, decodedBodySize: 6_000 })
+    ]);
+
+    const measurement = collector.read("/");
+
+    // Folding cache into the byte-class enum made this structurally zero on the
+    // one engine the behaviour was documented against.
+    assert.equal(measurement?.cachedRequests, 3);
+    // Bytes are still counted exactly as reported, including Chromium's 300s.
+    assert.equal(measurement?.bytesTransferred, 5_600);
   } finally {
     browser.restore();
   }

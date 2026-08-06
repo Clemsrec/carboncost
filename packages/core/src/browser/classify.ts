@@ -23,6 +23,30 @@ export interface TimingLike {
   decodedBodySize: number;
   /** Chromium exposes this; Safari does not. 0 means an opaque response. */
   responseStatus?: number;
+  /** `""` on a real network fetch, `"cache"` on a cache hit. Not everywhere yet. */
+  deliveryType?: string;
+}
+
+/**
+ * Whether a resource came from cache.
+ *
+ * This is a separate axis from `classifyEntry`, not one of its cases. "Served
+ * from cache" and "reported transferred bytes" do not exclude each other:
+ * Chromium reports a flat ~300 bytes for a cache hit, so a cache-hit entry
+ * classifies as `transferred` for byte accounting while still being cached.
+ * Folding the two into one enum made the cached count structurally zero on the
+ * one engine the behaviour was documented against.
+ *
+ * `deliveryType` is authoritative where present. The fallback covers engines
+ * that do not expose it yet, where a cache hit really does report zero transfer
+ * alongside a non-empty body.
+ */
+export function isCached(entry: TimingLike): boolean {
+  if (typeof entry.deliveryType === "string" && entry.deliveryType !== "") {
+    return entry.deliveryType === "cache";
+  }
+
+  return entry.transferSize === 0 && (entry.encodedBodySize > 0 || entry.decodedBodySize > 0);
 }
 
 /**

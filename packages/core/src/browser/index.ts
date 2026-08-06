@@ -8,9 +8,9 @@
  *
  * Its output maps onto `trackPageview()` without transformation.
  */
-import { classifyEntry, originOf, type TimingLike } from "./classify.js";
+import { classifyEntry, isCached, originOf, type TimingLike } from "./classify.js";
 
-export { classifyEntry, isOpaque, originOf } from "./classify.js";
+export { classifyEntry, isCached, isOpaque, originOf } from "./classify.js";
 export type { EntryClass, TimingLike } from "./classify.js";
 
 export interface Measurement {
@@ -79,22 +79,32 @@ function emptyMeasurement(route: string): Measurement {
 }
 
 /**
- * Finds the route that was open when an entry started.
+ * Finds which route opening was current when an entry started.
  *
- * Attribution goes by the entry's own `startTime` against a timeline of route
- * changes, not by arrival order in the observer callback. The callback is
- * batched, so crediting "the currently open route" misfiles every resource
- * still in flight when a navigation happens.
+ * Returns an index into the timeline, not a route name: revisiting a route
+ * opens a new entry in the timeline, and its bytes must accumulate separately
+ * from the earlier visit. Keying by route name instead made every revisit
+ * re-emit the first visit's running total.
+ *
+ * Attribution goes by the entry's own `startTime`, not by arrival order in the
+ * observer callback. The callback is batched, so crediting "the currently open
+ * route" misfiles every resource still in flight when a navigation happens.
  */
-export function routeForStartTime(timeline: RouteMark[], startTime: number): string | undefined {
+export function visitIndexForStartTime(timeline: RouteMark[], startTime: number): number {
   for (let index = timeline.length - 1; index >= 0; index -= 1) {
     const mark = timeline[index];
     if (mark && mark.at <= startTime) {
-      return mark.route;
+      return index;
     }
   }
 
-  return timeline[0]?.route;
+  return timeline.length > 0 ? 0 : -1;
+}
+
+/** Route name for a start time. Thin wrapper over {@link visitIndexForStartTime}. */
+export function routeForStartTime(timeline: RouteMark[], startTime: number): string | undefined {
+  const index = visitIndexForStartTime(timeline, startTime);
+  return index < 0 ? undefined : timeline[index]?.route;
 }
 
 let active: PageCollector | null = null;
@@ -122,56 +132,57 @@ export function observePage(options: ObservePageOptions): PageCollector {
   const pageOrigin = typeof location !== "undefined" ? location.origin : "http://localhost";
 
   const timeline: RouteMark[] = [];
-  const measurements = new Map<string, Measurement>();
-  const dirty = new Set<string>();
+  // One measurement per route opening, parallel to the timeline. A second visit
+  // to the same route is a separate measurement, which is what makes "coming
+  // back costs less" observable at all.
+  const visits: Measurement[] = [];
+  const dirty = new Set<number>();
   let timer: ReturnType<typeof setTimeout> | null = null;
   let observer: PerformanceObserver | null = null;
   let navigationCounted = false;
   let stopped = false;
 
-  function measurementFor(route: string): Measurement {
-    let measurement = measurements.get(route);
-    if (!measurement) {
-      measurement = emptyMeasurement(route);
-      measurements.set(route, measurement);
-    }
-    return measurement;
+  function copy(measurement: Measurement): Measurement {
+    return { ...measurement, unknownOrigins: [...measurement.unknownOrigins] };
   }
 
   function flush(): void {
     timer = null;
-    for (const route of dirty) {
-      const measurement = measurements.get(route);
+    for (const index of dirty) {
+      const measurement = visits[index];
       if (measurement) {
-        options.onMeasure({ ...measurement, unknownOrigins: [...measurement.unknownOrigins] });
+        options.onMeasure(copy(measurement));
       }
     }
     dirty.clear();
   }
 
-  function schedule(route: string): void {
-    dirty.add(route);
+  function schedule(index: number): void {
+    dirty.add(index);
     if (timer === null) {
       timer = setTimeout(flush, debounceMs);
     }
   }
 
-  function record(entry: TimingLike & { startTime: number }, forcedRoute?: string): void {
-    const route = forcedRoute ?? routeForStartTime(timeline, entry.startTime);
-    if (route === undefined) {
+  function record(entry: TimingLike & { startTime: number }, forcedIndex?: number): void {
+    const index = forcedIndex ?? visitIndexForStartTime(timeline, entry.startTime);
+    const measurement = index < 0 ? undefined : visits[index];
+    if (!measurement) {
       return;
     }
 
-    const measurement = measurementFor(route);
     measurement.requests += 1;
+
+    // Cache is an independent axis from byte accounting: on Chromium a cache hit
+    // reports ~300 transferred bytes, so it counts as transferred *and* cached.
+    if (isCached(entry)) {
+      measurement.cachedRequests += 1;
+    }
 
     switch (classifyEntry(entry, pageOrigin)) {
       case "transferred":
-        measurement.bytesTransferred += entry.transferSize;
-        break;
       case "cached":
-        measurement.cachedRequests += 1;
-        // Counted as reported: Chromium's flat per-resource figure lands here.
+        // Counted as reported, never normalised.
         measurement.bytesTransferred += entry.transferSize;
         break;
       case "opaque": {
@@ -187,7 +198,7 @@ export function observePage(options: ObservePageOptions): PageCollector {
         break;
     }
 
-    schedule(route);
+    schedule(index);
   }
 
   /**
@@ -219,31 +230,56 @@ export function observePage(options: ObservePageOptions): PageCollector {
       }
     })();
 
-    record(navigation, documentRoute ?? timeline[0]?.route);
+    if (documentRoute === undefined) {
+      return;
+    }
+
+    // Opened at t=0 so it precedes every route change and every resource.
+    record(navigation, openVisit(documentRoute, 0));
+  }
+
+  function openVisit(route: string, at: number): number {
+    timeline.push({ route, at });
+    visits.push(emptyMeasurement(route));
+    return timeline.length - 1;
   }
 
   const collector: PageCollector = {
     setRoute(route: string) {
-      if (stopped || timeline[timeline.length - 1]?.route === route) {
+      if (stopped) {
         return;
       }
 
-      timeline.push({ route, at: performance.now() });
-      measurementFor(route);
+      // Seed the document's own route first, at t=0, so its bytes land on the
+      // page that was actually loaded even if the first setRoute names another.
       countNavigation();
-      schedule(route);
+
+      if (timeline[timeline.length - 1]?.route === route) {
+        schedule(timeline.length - 1);
+        return;
+      }
+
+      schedule(openVisit(route, performance.now()));
     },
 
     read(route?: string) {
-      const target = route ?? timeline[timeline.length - 1]?.route;
-      const measurement = target === undefined ? undefined : measurements.get(target);
-      return measurement
-        ? { ...measurement, unknownOrigins: [...measurement.unknownOrigins] }
-        : undefined;
+      if (route === undefined) {
+        const current = visits[visits.length - 1];
+        return current ? copy(current) : undefined;
+      }
+
+      for (let index = visits.length - 1; index >= 0; index -= 1) {
+        const visit = visits[index];
+        if (visit?.route === route) {
+          return copy(visit);
+        }
+      }
+
+      return undefined;
     },
 
     readAll() {
-      return timeline.map((mark) => this.read(mark.route)).filter(Boolean) as Measurement[];
+      return visits.map(copy);
     },
 
     stop() {

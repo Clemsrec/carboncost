@@ -13,8 +13,8 @@
 import { createElement, type ReactElement } from "react";
 
 import { formatForDisplay, type CarbonDisplayCategory } from "../display.js";
-import { toEquivalents } from "../equivalents.js";
-import { useCarbon, type UseCarbonOptions } from "./index.js";
+import { toEquivalents, type CarbonEquivalents } from "../equivalents.js";
+import { useCarbon, type UseCarbonOptions, type UseCarbonResult } from "./index.js";
 
 export interface CarbonBadgeProps extends UseCarbonOptions {
   /** BCP 47 locale for number formatting. Defaults to "en". */
@@ -25,15 +25,29 @@ export interface CarbonBadgeProps extends UseCarbonOptions {
   label?: string;
   className?: string;
   /**
-   * Full control over the text. Receives the session total in grams, its
-   * display category, and the same equivalents the default rendering uses.
+   * Full control over the text.
+   *
+   * Receives everything `useCarbon()` returns — measurement, events, session
+   * totals, unknown origins — plus the derived display values. A real footer
+   * badge shows page counts and bytes received, not just grams, and a narrower
+   * payload just means the component gets reimplemented.
    */
-  children?: (state: {
-    grams: number;
-    category: CarbonDisplayCategory;
-    trainDisplay: string;
-    unknownRequests: number;
-  }) => ReactElement | string | null;
+  children?: (state: CarbonBadgeState) => ReactElement | string | null;
+}
+
+export interface CarbonBadgeState extends UseCarbonResult {
+  /** Session total in grams. */
+  grams: number;
+  /** Display band for the current route. */
+  category: CarbonDisplayCategory;
+  /** Session total formatted for `locale`. */
+  gramsDisplay: string;
+  /** Human equivalents for the session total, formatted for `locale`. */
+  equivalents: CarbonEquivalents;
+  /** Bytes received across the session. */
+  bytesTransferred: number;
+  /** Number of route views measured. */
+  views: number;
 }
 
 const DOT_COLOURS: Record<CarbonDisplayCategory, string> = {
@@ -45,7 +59,8 @@ const DOT_COLOURS: Record<CarbonDisplayCategory, string> = {
 
 export function CarbonBadge(props: CarbonBadgeProps): ReactElement | null {
   const { locale = "en", href, label, className, children, ...carbonOptions } = props;
-  const { session, event, unknownRequests } = useCarbon(carbonOptions);
+  const carbon = useCarbon(carbonOptions);
+  const { session, event } = carbon;
 
   // Render nothing until there is something true to say.
   if (!event || session.totalGrams <= 0) {
@@ -60,10 +75,16 @@ export function CarbonBadge(props: CarbonBadgeProps): ReactElement | null {
 
   if (children) {
     const rendered = children({
+      ...carbon,
       grams: session.totalGrams,
       category: display.category,
-      trainDisplay: equivalents.trainKmDisplay,
-      unknownRequests
+      gramsDisplay: grams,
+      equivalents,
+      bytesTransferred: carbon.events.reduce(
+        (total, pageview) => total + pageview.input.bytesTransferred,
+        0
+      ),
+      views: carbon.events.length
     });
     return createElement(
       "span",

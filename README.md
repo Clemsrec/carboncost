@@ -35,8 +35,12 @@ Pro features are planned later and are out of scope for this release.
 ### npm / pnpm / yarn
 
 ```bash
-npm install carbone-cost
+npm install carbone-cost@latest
 ```
+
+> While the package is on 0.x, a caret range pins the **minor**, so
+> `npm update carbone-cost` will not move you from 0.6 to 0.9. Use
+> `npm i carbone-cost@latest` to cross a minor.
 
 ```bash
 pnpm add carbone-cost
@@ -179,6 +183,16 @@ Three things worth knowing before you trust the numbers:
   *with* the header, served from cache, is not opaque and is measured normally.
 - **A bfcache restore costs nothing.** No navigation entry, no resources. That
   is correct, and it will look like a bug to anyone not expecting it.
+- **Revisiting a route opens a new measurement.** `readAll()` returns one entry
+  per visit, not per route, so a session that comes back to a page shows the
+  cheaper second visit rather than hiding it. Group them yourself with
+  `aggregateEvents(events, { groupBy: "route" })`.
+- **A prefetched payload is billed to the route that triggered it.** Frameworks
+  fetch the next route's payload on hover or click, before the path changes, so
+  its `startTime` precedes the new route's mark. Arriving on a page can
+  therefore show near-zero bytes while the page you came from carries them.
+  That is the honest accounting — those bytes were spent by the earlier page —
+  but it surprises people.
 
 Only one collector may run at a time — `buffered: true` replays history, so a
 second one would count everything twice. Starting a second throws rather than
