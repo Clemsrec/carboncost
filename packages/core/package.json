@@ -1,6 +1,6 @@
 {
   "name": "carbone-cost",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Core estimation and methodology utilities for Carbon Site Kit.",
   "type": "module",
   "main": "./dist/index.js",
