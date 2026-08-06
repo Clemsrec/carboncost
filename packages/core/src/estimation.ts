@@ -200,19 +200,25 @@ export function estimateWeb(input: WebPageviewInput): CarbonResult {
       SWD_ENERGY_KWH_PER_GB.userDevice.embodied * GLOBAL_GRID_INTENSITY_G_PER_KWH);
 
   const gramsCO2e = round(dataCenterGrams + networkGrams + userDeviceGrams);
+  const unknownRequests = Math.max(0, input.unknownRequests ?? 0);
 
   return {
     gramsCO2e,
     methodology: WEB_METHODOLOGY,
-    confidence: green.declared ? "benchmarked" : "estimated",
+    // Unmeasured requests make the total a known undercount, whatever else we know.
+    confidence: unknownRequests > 0 ? "estimated" : green.declared ? "benchmarked" : "estimated",
     assumptions: [
       "Applies Sustainable Web Design Model intensities per GB transferred, across data centre, network and user device.",
       "Includes both operational and embodied energy.",
       green.declared
         ? "Green hosting adjusts data centre operational emissions only."
-        : "No hosting signal provided, so no green hosting adjustment was applied."
+        : "No hosting signal provided, so no green hosting adjustment was applied.",
+      ...(unknownRequests > 0
+        ? [`${unknownRequests} requests could not be measured and are excluded, so this is a floor.`]
+        : [])
     ],
     breakdown: {
+      unknownRequests,
       bytesTransferred: bytes,
       gigaBytes,
       gridIntensityGCO2ePerKWh: gridIntensity,

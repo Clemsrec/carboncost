@@ -237,6 +237,67 @@ test("toEquivalents formats tiny train distances as less than one meter", () => 
   assert.equal(equivalents.trainKmDisplay, "< 1 m");
 });
 
+test("toEquivalents formats for the requested locale", () => {
+  const english = toEquivalents(160);
+  const french = toEquivalents(160, { locale: "fr" });
+
+  assert.equal(english.trainKmDisplay, "11.43 km");
+  assert.equal(french.trainKmDisplay, "11,43 km");
+  assert.equal(french.laptopChargesDisplay, "4,9 charge");
+
+  const tiny = toEquivalents(0.05, { locale: "fr" });
+  assert.equal(tiny.phoneChargesDisplay, "< 0,1 charge");
+});
+
+test("toEquivalents accepts translated unit labels", () => {
+  const german = toEquivalents(160, {
+    locale: "de",
+    labels: { charge: "Ladung", hour: "Std." }
+  });
+
+  assert.equal(german.phoneChargesDisplay, "100 Ladung");
+  assert.equal(german.ledBulbHoursDisplay, "40 Std.");
+});
+
+test("estimateWeb marks an estimate with unmeasured requests as a floor", () => {
+  const measured = estimateWeb({ bytesTransferred: 1_000_000, greenHosting: false });
+  const partial = estimateWeb({
+    bytesTransferred: 1_000_000,
+    greenHosting: false,
+    unknownRequests: 3
+  });
+
+  assert.equal(measured.confidence, "benchmarked");
+  assert.equal(partial.confidence, "estimated");
+  assert.equal(partial.breakdown?.unknownRequests, 3);
+  assert.ok(partial.assumptions.some((line) => line.includes("floor")));
+});
+
+test("aggregateSession separates pageview and AI grams", () => {
+  const events = [
+    trackPageview({ bytesTransferred: 1_000_000, route: "/" }),
+    trackAIUsage({
+      provider: "openai",
+      model: "gpt-4o",
+      promptTokens: 10_000,
+      completionTokens: 5_000
+    })
+  ];
+
+  const session = aggregateSession(events);
+
+  assert.equal(session.totalViews, 1);
+  assert.ok(session.aiGrams > 0);
+  assert.ok(session.pageviewGrams > 0);
+  assert.equal(round6(session.pageviewGrams + session.aiGrams), round6(session.totalGrams));
+  // The average is per pageview, so AI must not inflate it.
+  assert.equal(session.averageGramsPerView, session.pageviewGrams);
+});
+
+function round6(value: number): number {
+  return Math.round(value * 1_000_000) / 1_000_000;
+}
+
 test("aggregateSession returns totals and averages for pageviews", () => {
   const events = [
     trackPageview({ bytesTransferred: 1000000, route: "/" }),

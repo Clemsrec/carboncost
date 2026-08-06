@@ -42,6 +42,14 @@ export type WebPageviewInput = {
    * entirely. Use it when you have an intensity you trust more than the default.
    */
   factorGPerGB?: number;
+  /**
+   * Number of resources whose size could not be measured — typically opaque
+   * cross-origin responses without `Timing-Allow-Origin`, which report a
+   * `transferSize` of 0. Declaring them keeps the estimate an explicit
+   * undercount instead of a silent one: they are excluded from the total and
+   * surfaced by `diagnose()`.
+   */
+  unknownRequests?: number;
   timestamp?: string;
   metadata?: Record<string, unknown>;
 };

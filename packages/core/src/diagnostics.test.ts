@@ -23,12 +23,48 @@ test("diagnose marks webApiCalls as missing when expected but not tracked", () =
   assert.equal(report.webApiCalls.status, "missing");
 });
 
-test("diagnose marks aiInference as unknown when not expected and absent", () => {
-  const report = diagnose({ expectsAiTracking: false }, [
-    trackPageview({ bytesTransferred: 1000, route: "/" })
-  ]);
+test("diagnose distinguishes 'nothing to measure' from 'could not measure'", () => {
+  const pageview = [trackPageview({ bytesTransferred: 1000, route: "/" })];
 
-  assert.equal(report.aiInference.status, "unknown");
+  // Declared as not applicable: there is genuinely nothing to track.
+  const declared = diagnose({ expectsAiTracking: false }, pageview);
+  assert.equal(declared.aiInference.status, "not-applicable");
+  assert.equal(declared.aiInference.reason, "not-expected");
+
+  // No expectation either way: we really do not know.
+  const undeclared = diagnose({}, pageview);
+  assert.equal(undeclared.aiInference.status, "unknown");
+  assert.equal(undeclared.aiInference.reason, "no-events");
+});
+
+test("diagnose reports the threshold that produced a partial verdict", () => {
+  const report = diagnose({}, [trackPageview({ bytesTransferred: 1000, route: "/" })]);
+
+  assert.equal(report.webPageviews.status, "partial");
+  assert.equal(report.webPageviews.reason, "below-sample-threshold");
+  assert.equal(report.webPageviews.metrics.observed, 1);
+  assert.equal(report.webPageviews.metrics.minSampleEvents, 3);
+});
+
+test("diagnose caps coverage at partial when requests could not be measured", () => {
+  const events = [
+    trackPageview({ bytesTransferred: 1000, route: "/", unknownRequests: 4 }),
+    trackPageview({ bytesTransferred: 2000, route: "/pricing" }),
+    trackPageview({ bytesTransferred: 3000, route: "/docs" })
+  ];
+
+  const report = diagnose({}, events);
+
+  assert.equal(report.webPageviews.status, "partial");
+  assert.equal(report.webPageviews.reason, "unmeasured-requests");
+  assert.equal(report.webPageviews.metrics.unknownRequests, 4);
+});
+
+test("diagnose reports client device as covered by the model", () => {
+  const report = diagnose({}, []);
+
+  assert.equal(report.clientDevice.status, "covered");
+  assert.equal(report.clientDevice.reason, "covered-by-model");
 });
 
 test("diagnose marks hostingInfo as covered when provider region and green flag exist", () => {

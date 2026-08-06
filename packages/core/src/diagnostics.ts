@@ -1,11 +1,44 @@
 import type { CarbonEvent } from "./types.js";
 
-export type CoverageStatus = "covered" | "partial" | "missing" | "unknown";
+export type CoverageStatus =
+  | "covered"
+  | "partial"
+  | "missing"
+  | "unknown"
+  /** Nothing to measure here, by configuration. Distinct from "we could not measure". */
+  | "not-applicable";
+
+/**
+ * Stable machine-readable reason behind a status. Use this for UI logic and
+ * translation; `notes` is English prose for integrators and is not meant to be
+ * shown to end users.
+ */
+export type CoverageReason =
+  | "sufficient-samples"
+  | "no-events"
+  | "not-expected"
+  | "below-sample-threshold"
+  | "incomplete-fields"
+  | "unmeasured-requests"
+  | "config-complete"
+  | "config-incomplete"
+  | "config-missing"
+  | "covered-by-model";
 
 export interface CoverageDimension {
   status: CoverageStatus;
+  reason: CoverageReason;
+  /** The numbers behind the verdict, including the thresholds that were applied. */
+  metrics: Record<string, number>;
+  /** English prose for integrators. Not suitable for end users — translate from `reason`. */
   notes: string[];
 }
+
+/** A dimension needs at least this many events before it can be "covered". */
+export const MIN_SAMPLE_EVENTS = 3;
+
+/** And at least this share of them must carry the fields the estimate needs. */
+export const MIN_FIELD_COVERAGE_RATIO = 0.7;
 
 export interface CoverageReport {
   webPageviews: CoverageDimension;
@@ -38,8 +71,78 @@ export interface DiagnosticsEvent {
 
 export type AnyEvent = CarbonEvent | DiagnosticsEvent;
 
-function toCoverage(status: CoverageStatus, notes: string[]): CoverageDimension {
-  return { status, notes };
+function toCoverage(
+  status: CoverageStatus,
+  reason: CoverageReason,
+  metrics: Record<string, number>,
+  notes: string[]
+): CoverageDimension {
+  return { status, reason, metrics, notes };
+}
+
+/**
+ * Classifies an event stream against the sample and field-completeness
+ * thresholds, so every dimension reports the same way and the thresholds are
+ * visible from the outside instead of being buried in the branch conditions.
+ */
+function classifySamples(
+  observed: number,
+  complete: number,
+  expected: boolean | undefined,
+  labels: { unit: string; field: string }
+): CoverageDimension {
+  const metrics = {
+    observed,
+    complete,
+    minSampleEvents: MIN_SAMPLE_EVENTS,
+    minFieldCoverageRatio: MIN_FIELD_COVERAGE_RATIO,
+    fieldCoverageRatio: observed === 0 ? 0 : complete / observed
+  };
+
+  if (observed === 0 && expected === true) {
+    return toCoverage("missing", "no-events", metrics, [
+      `Tracking was expected but no ${labels.unit} events were found.`
+    ]);
+  }
+
+  if (observed === 0 && expected === false) {
+    return toCoverage("not-applicable", "not-expected", metrics, [
+      `No ${labels.unit} events, and none are expected in this configuration.`
+    ]);
+  }
+
+  if (observed === 0) {
+    return toCoverage("unknown", "no-events", metrics, [
+      `No expectation declared and no ${labels.unit} events; this traffic may simply not be tracked.`
+    ]);
+  }
+
+  if (observed < MIN_SAMPLE_EVENTS) {
+    return toCoverage("partial", "below-sample-threshold", metrics, [
+      `${observed} ${labels.unit} events observed, below the ${MIN_SAMPLE_EVENTS} needed to judge coverage.`
+    ]);
+  }
+
+  if (metrics.fieldCoverageRatio < MIN_FIELD_COVERAGE_RATIO) {
+    return toCoverage("partial", "incomplete-fields", metrics, [
+      `${complete}/${observed} ${labels.unit} events include ${labels.field}, below the ${MIN_FIELD_COVERAGE_RATIO} ratio required.`
+    ]);
+  }
+
+  return toCoverage("covered", "sufficient-samples", metrics, [
+    `${observed} ${labels.unit} events observed.`,
+    `${complete}/${observed} include ${labels.field}.`
+  ]);
+}
+
+function countUnknownRequests(events: AnyEvent[]): number {
+  return events.reduce((total, event) => {
+    const fromInput = getNumber(
+      (event as { input?: { unknownRequests?: unknown } }).input?.unknownRequests
+    );
+    const fromRoot = getNumber((event as { unknownRequests?: unknown }).unknownRequests);
+    return total + (fromInput ?? fromRoot ?? 0);
+  }, 0);
 }
 
 function getNumber(value: unknown): number | undefined {
@@ -82,64 +185,40 @@ export function diagnose(config: DiagnosticsConfig, recentEvents: AnyEvent[]): C
   const aiWithModel = aiEvents.filter(hasAiModel).length;
   const aiEstimated = aiEvents.filter(isEstimatedAi).length;
 
-  let webPageviews: CoverageDimension;
-  if (pageviews.length === 0) {
-    webPageviews = toCoverage("missing", ["No web.pageview events were found in recent samples."]);
-  } else if (pageviews.length < 3 || pageviewsWithBytes / pageviews.length < 0.7) {
-    webPageviews = toCoverage("partial", [
-      `${pageviews.length} web.pageview events observed.`,
-      `${pageviewsWithBytes}/${pageviews.length} include bytesTransferred.`
-    ]);
-  } else {
-    webPageviews = toCoverage("covered", [
-      `${pageviews.length} web.pageview events observed.`,
-      `${pageviewsWithBytes}/${pageviews.length} include bytesTransferred.`
-    ]);
+  const webPageviews = classifySamples(pageviews.length, pageviewsWithBytes, undefined, {
+    unit: "web.pageview",
+    field: "bytesTransferred"
+  });
+
+  // Opaque cross-origin resources report transferSize 0. An integrator that
+  // counts them as zero silently undercounts, so a declared count of unmeasured
+  // requests caps the verdict at "partial" and says so.
+  const unknownRequests = countUnknownRequests(pageviews);
+  if (unknownRequests > 0) {
+    webPageviews.metrics.unknownRequests = unknownRequests;
+    webPageviews.notes.push(
+      `${unknownRequests} requests could not be measured and are excluded from the estimate.`
+    );
+    if (webPageviews.status === "covered") {
+      webPageviews.status = "partial";
+      webPageviews.reason = "unmeasured-requests";
+    }
   }
 
-  let webApiCalls: CoverageDimension;
-  if (apiCalls.length === 0 && config.expectsApiTracking === true) {
-    webApiCalls = toCoverage("missing", [
-      "API tracking was expected but no web.api_call events were found."
-    ]);
-  } else if (apiCalls.length === 0) {
-    webApiCalls = toCoverage("unknown", [
-      "No expectation and no web.api_call events; backend/API traffic may not be tracked."
-    ]);
-  } else if (apiCalls.length < 3 || apiCallsWithBytes / apiCalls.length < 0.7) {
-    webApiCalls = toCoverage("partial", [
-      `${apiCalls.length} web.api_call events observed.`,
-      `${apiCallsWithBytes}/${apiCalls.length} include bytes in/out fields.`
-    ]);
-  } else {
-    webApiCalls = toCoverage("covered", [
-      `${apiCalls.length} web.api_call events observed.`,
-      `${apiCallsWithBytes}/${apiCalls.length} include bytes in/out fields.`
-    ]);
-  }
+  const webApiCalls = classifySamples(
+    apiCalls.length,
+    apiCallsWithBytes,
+    config.expectsApiTracking,
+    { unit: "web.api_call", field: "bytes in/out fields" }
+  );
 
-  let aiInference: CoverageDimension;
-  if (aiEvents.length === 0 && config.expectsAiTracking === true) {
-    aiInference = toCoverage("missing", [
-      "AI tracking was expected but no ai.inference/ai.usage events were found."
-    ]);
-  } else if (aiEvents.length === 0) {
-    aiInference = toCoverage("unknown", [
-      "No expectation and no AI events; inference traffic may not be tracked."
-    ]);
-  } else if (aiEvents.length < 3 || aiWithModel / aiEvents.length < 0.7) {
-    aiInference = toCoverage("partial", [
-      `${aiEvents.length} AI events observed.`,
-      `${aiWithModel}/${aiEvents.length} include model metadata.`
-    ]);
-  } else {
-    aiInference = toCoverage("covered", [
-      `${aiEvents.length} AI events observed.`,
-      `${aiWithModel}/${aiEvents.length} include model metadata.`
-    ]);
-  }
+  const aiInference = classifySamples(aiEvents.length, aiWithModel, config.expectsAiTracking, {
+    unit: "AI",
+    field: "model metadata"
+  });
 
   if (aiEstimated > 0) {
+    aiInference.metrics.estimatedConfidence = aiEstimated;
     aiInference.notes.push(
       `${aiEstimated}/${aiEvents.length} AI events are using estimated confidence (fallback model factors may apply).`
     );
@@ -155,23 +234,31 @@ export function diagnose(config: DiagnosticsConfig, recentEvents: AnyEvent[]): C
     (key) => !hostingKnown.includes(key)
   );
 
+  const hostingMetrics = {
+    knownFields: hostingKnown.length,
+    expectedFields: 3
+  };
+
   let hostingInfo: CoverageDimension;
   if (hostingKnown.length === 3) {
-    hostingInfo = toCoverage("covered", [
-      `Known fields: ${hostingKnown.join(", ")}.`,
-      "Hosting context can be documented in diagnostics notes."
+    hostingInfo = toCoverage("covered", "config-complete", hostingMetrics, [
+      `Known fields: ${hostingKnown.join(", ")}.`
     ]);
   } else if (hostingKnown.length > 0) {
-    hostingInfo = toCoverage("partial", [
+    hostingInfo = toCoverage("partial", "config-incomplete", hostingMetrics, [
       `Known fields: ${hostingKnown.join(", ")}.`,
       `Unknown fields: ${hostingMissing.join(", ")}.`
     ]);
   } else {
-    hostingInfo = toCoverage("missing", ["No hosting metadata was provided in diagnostics config."]);
+    hostingInfo = toCoverage("missing", "config-missing", hostingMetrics, [
+      "No hosting metadata was provided in diagnostics config."
+    ]);
   }
 
-  const clientDevice = toCoverage("missing", [
-    "End-user device energy is not estimated in current methodology."
+  // The web model carries user device energy in its own segment, so this is no
+  // longer an uncovered dimension.
+  const clientDevice = toCoverage("covered", "covered-by-model", {}, [
+    "End-user device energy is included in the web estimate as its own segment."
   ]);
 
   return {

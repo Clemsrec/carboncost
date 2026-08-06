@@ -1,4 +1,4 @@
-import type { CarbonResult, WebPageviewEvent } from "./types.js";
+import type { CarbonEvent, CarbonResult, WebPageviewEvent } from "./types.js";
 
 export type CarbonDisplayCategory = "very-low" | "low" | "medium" | "high";
 
@@ -15,8 +15,14 @@ export interface FormatOptions {
 }
 
 export interface SessionAggregation {
+  /** Every event in the session, web and AI. */
   totalGrams: number;
+  /** Pageview events only. */
+  pageviewGrams: number;
+  /** Everything that is not a pageview. */
+  aiGrams: number;
   totalViews: number;
+  /** `pageviewGrams` divided by `totalViews`. */
   averageGramsPerView: number;
 }
 
@@ -70,16 +76,33 @@ export function formatForDisplay(
   };
 }
 
-export function aggregateSession(events: WebPageviewEvent[]): SessionAggregation {
-  const totalViews = events.length;
+/**
+ * Sums a session's events. Accepts any `CarbonEvent`, so AI usage counts toward
+ * the session total, while `totalViews` and the per-view average stay based on
+ * pageviews alone — dividing a total that includes inference by a pageview count
+ * would be meaningless.
+ */
+export function aggregateSession(events: CarbonEvent[]): SessionAggregation {
+  const pageviews = events.filter(
+    (event): event is WebPageviewEvent => event.type === "web.pageview"
+  );
+
   const totalGrams = round(
     events.reduce((sum, event) => sum + event.result.gramsCO2e, 0),
     6
   );
+  const pageviewGrams = round(
+    pageviews.reduce((sum, event) => sum + event.result.gramsCO2e, 0),
+    6
+  );
+
+  const totalViews = pageviews.length;
 
   return {
     totalGrams,
     totalViews,
-    averageGramsPerView: totalViews === 0 ? 0 : round(totalGrams / totalViews, 6)
+    pageviewGrams,
+    aiGrams: round(totalGrams - pageviewGrams, 6),
+    averageGramsPerView: totalViews === 0 ? 0 : round(pageviewGrams / totalViews, 6)
   };
 }
