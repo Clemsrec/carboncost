@@ -1,6 +1,6 @@
 {
   "name": "@clemsrec/browser",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Lightweight browser SDK for Carbon Site Kit.",
   "type": "module",
   "main": "./dist/index.js",
