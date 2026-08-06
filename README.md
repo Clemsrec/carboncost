@@ -129,6 +129,61 @@ const event = trackAIUsage({
 });
 ```
 
+### Measuring a page in the browser
+
+`carbone-cost/browser` observes what a page actually transferred. It sends
+nothing, writes no cookie and touches no storage — the tally lives in memory and
+disappears with the tab. Nothing runs at import time, so the module is safe to
+import from code that also renders on a server.
+
+```ts
+import { observePage } from "carbone-cost/browser";
+import { trackPageview } from "carbone-cost";
+
+const collector = observePage({
+  initialRoute: location.pathname,
+  onMeasure(measurement) {
+    // Debounced, and cumulative for the route.
+    const { route, bytesTransferred, unknownRequests, unknownOrigins } = measurement;
+    trackPageview({ route, bytesTransferred, unknownRequests, unknownOrigins });
+  }
+});
+
+collector.setRoute("/pricing"); // on every client-side navigation
+collector.stop();               // idempotent
+```
+
+`setRoute` is a push, not a getter: the collector cannot know when a client-side
+navigation happens, and in frameworks that swap the path during render a getter
+read on resource arrival would be consulted at arbitrary moments.
+
+A `Measurement` maps onto `trackPageview()` without transformation:
+
+| Field | Meaning |
+| --- | --- |
+| `bytesTransferred` | Bytes observed crossing the network |
+| `unknownRequests` | Resources whose size the browser hid |
+| `unknownOrigins` | Which origins those were, deduplicated |
+| `cachedRequests` | Resources served from cache |
+| `requests` | Every entry attributed to the route |
+
+Three things worth knowing before you trust the numbers:
+
+- **Cached bytes are counted as the browser reports them.** Chromium returns a
+  flat ~300 bytes per cached resource where other engines return 0. That
+  divergence is surfaced through `cachedRequests` rather than normalised away —
+  subtracting a hardcoded constant would become an invented number the day
+  Chromium changes it.
+- **Opaque resources are counted as unknown, never as zero.** A cross-origin
+  response without `Timing-Allow-Origin` hides its size. A cross-origin response
+  *with* the header, served from cache, is not opaque and is measured normally.
+- **A bfcache restore costs nothing.** No navigation entry, no resources. That
+  is correct, and it will look like a bug to anyone not expecting it.
+
+Only one collector may run at a time — `buffered: true` replays history, so a
+second one would count everything twice. Starting a second throws rather than
+silently double-counting.
+
 ### UI-friendly helpers
 
 The core package also exposes thin presentation helpers for product surfaces such as footer badges, session summaries, and diagnostic pages.
