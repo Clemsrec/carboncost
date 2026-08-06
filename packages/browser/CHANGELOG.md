@@ -1,5 +1,12 @@
 # @clemsrec/browser
 
+## 0.2.8
+
+### Patch Changes
+
+- Updated dependencies [a1efe75]
+  - carbone-cost@0.8.0
+
 ## 0.2.7
 
 ### Patch Changes
