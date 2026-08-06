@@ -11,9 +11,28 @@ import type {
   WebPageviewInput
 } from "./types.js";
 
-const WEB_GRAMS_PER_GB = 0.5;
+/**
+ * Sustainable Web Design Model energy intensities, in kWh per GB transferred,
+ * split by system segment and by operational vs embodied energy.
+ *
+ * Source: https://sustainablewebdesign.org/estimating-digital-emissions/
+ *
+ * Totals 0.300 kWh/GB, which at the global average grid intensity works out to
+ * roughly 148 gCO2e per GB. Earlier versions of this package used 0.5 g/GB —
+ * a per-megabyte figure mislabelled as per-gigabyte, understating every web
+ * estimate by more than two orders of magnitude.
+ */
+const SWD_ENERGY_KWH_PER_GB = {
+  dataCenter: { operational: 0.055, embodied: 0.012 },
+  network: { operational: 0.059, embodied: 0.013 },
+  userDevice: { operational: 0.08, embodied: 0.081 }
+} as const;
 
-const GREEN_HOSTING_MULTIPLIER = 0.5;
+/** Global average grid intensity in gCO2e per kWh (Ember, via the SWD model). */
+const GLOBAL_GRID_INTENSITY_G_PER_KWH = 494;
+
+/** Data transfer is measured in decimal gigabytes, as the model intends. */
+const BYTES_PER_GB = 1_000_000_000;
 
 /**
  * Known per-model factors, in grams of CO2e per 1,000 tokens.
@@ -117,32 +136,91 @@ function resolveAIFactor(input: AIUsageInput): ResolvedFactor {
   };
 }
 
+function clampUnitInterval(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
+/**
+ * Resolves the share of hosting running on renewable energy. An explicit
+ * numeric factor wins; otherwise the coarse boolean maps to 1 or 0. Neither
+ * `"unknown"` nor an omitted field counts as a signal.
+ */
+function resolveGreenHostingFactor(input: WebPageviewInput): {
+  factor: number;
+  declared: boolean;
+} {
+  if (typeof input.greenHostingFactor === "number") {
+    return { factor: clampUnitInterval(input.greenHostingFactor), declared: true };
+  }
+
+  if (typeof input.greenHosting === "boolean") {
+    return { factor: input.greenHosting ? 1 : 0, declared: true };
+  }
+
+  return { factor: 0, declared: false };
+}
+
 export function estimateWeb(input: WebPageviewInput): CarbonResult {
   const bytes = Math.max(0, input.bytesTransferred);
-  const gigaBytes = bytes / (1024 * 1024 * 1024);
+  const gigaBytes = bytes / BYTES_PER_GB;
 
-  // Only an explicit boolean is a hosting signal. `"unknown"` and an omitted
-  // field both mean "we were told nothing", and must not be reported as benchmarked.
-  const hasHostingSignal = typeof input.greenHosting === "boolean";
-  const greenMultiplier = input.greenHosting === true ? GREEN_HOSTING_MULTIPLIER : 1;
+  if (typeof input.factorGPerGB === "number" && input.factorGPerGB >= 0) {
+    return {
+      gramsCO2e: round(gigaBytes * input.factorGPerGB),
+      methodology: WEB_METHODOLOGY,
+      confidence: "benchmarked",
+      assumptions: ["Uses the caller-supplied intensity in grams of CO2e per GB."],
+      breakdown: {
+        bytesTransferred: bytes,
+        gigaBytes,
+        effectiveGramsPerGB: input.factorGPerGB
+      }
+    };
+  }
 
-  const gramsCO2e = round(gigaBytes * WEB_GRAMS_PER_GB * greenMultiplier);
+  const gridIntensity = input.gridIntensityGCO2ePerKWh ?? GLOBAL_GRID_INTENSITY_G_PER_KWH;
+  const green = resolveGreenHostingFactor(input);
+
+  // Green hosting reduces data centre operational emissions only. Nothing about
+  // a renewable-powered host changes what the network or the visitor's device
+  // burns, and embodied emissions keep the global average either way.
+  const dataCenterGrams =
+    gigaBytes *
+    (SWD_ENERGY_KWH_PER_GB.dataCenter.operational * gridIntensity * (1 - green.factor) +
+      SWD_ENERGY_KWH_PER_GB.dataCenter.embodied * GLOBAL_GRID_INTENSITY_G_PER_KWH);
+
+  const networkGrams =
+    gigaBytes *
+    (SWD_ENERGY_KWH_PER_GB.network.operational * gridIntensity +
+      SWD_ENERGY_KWH_PER_GB.network.embodied * GLOBAL_GRID_INTENSITY_G_PER_KWH);
+
+  const userDeviceGrams =
+    gigaBytes *
+    (SWD_ENERGY_KWH_PER_GB.userDevice.operational * gridIntensity +
+      SWD_ENERGY_KWH_PER_GB.userDevice.embodied * GLOBAL_GRID_INTENSITY_G_PER_KWH);
+
+  const gramsCO2e = round(dataCenterGrams + networkGrams + userDeviceGrams);
 
   return {
     gramsCO2e,
     methodology: WEB_METHODOLOGY,
-    confidence: hasHostingSignal ? "benchmarked" : "estimated",
+    confidence: green.declared ? "benchmarked" : "estimated",
     assumptions: [
-      "Uses a fixed grams-per-GB coefficient for web delivery.",
-      hasHostingSignal
-        ? `Applies a ${GREEN_HOSTING_MULTIPLIER}x multiplier for green hosting when declared.`
+      "Applies Sustainable Web Design Model intensities per GB transferred, across data centre, network and user device.",
+      "Includes both operational and embodied energy.",
+      green.declared
+        ? "Green hosting adjusts data centre operational emissions only."
         : "No hosting signal provided, so no green hosting adjustment was applied."
     ],
     breakdown: {
       bytesTransferred: bytes,
       gigaBytes,
-      gramsPerGB: WEB_GRAMS_PER_GB,
-      greenMultiplier
+      gridIntensityGCO2ePerKWh: gridIntensity,
+      greenHostingFactor: green.factor,
+      dataCenterGrams: round(dataCenterGrams),
+      networkGrams: round(networkGrams),
+      userDeviceGrams: round(userDeviceGrams),
+      effectiveGramsPerGB: gigaBytes > 0 ? round(gramsCO2e / gigaBytes, 3) : 0
     }
   };
 }

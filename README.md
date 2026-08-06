@@ -35,14 +35,25 @@ Pro features are planned later and are out of scope for this release.
 ### npm / pnpm / yarn
 
 ```bash
-pnpm add carbone-cost @clemsrec/browser @clemsrec/next
+npm install carbone-cost
 ```
-
-Or install only what you need:
 
 ```bash
 pnpm add carbone-cost
 ```
+
+```bash
+yarn add carbone-cost
+```
+
+The browser SDK and the Next.js adapter are separate, optional packages:
+
+```bash
+npm install @clemsrec/browser @clemsrec/next
+```
+
+All packages are ESM only. They work in the Next.js App Router, Vite, and any
+bundler targeting ES modules. A CommonJS `require()` will fail.
 
 ### Script tag / CDN
 
@@ -325,8 +336,44 @@ export async function POST(request: Request) {
 
 Carbon Site Kit uses estimation models with explicit versioning:
 
-- `web-estimation-v1`
+- `web-estimation-v2`
 - `ai-token-estimation-v1`
+
+### Web estimation
+
+Web estimates apply the [Sustainable Web Design Model](https://sustainablewebdesign.org/estimating-digital-emissions/)
+intensities per GB transferred, across three segments and both operational and
+embodied energy:
+
+| Segment | Operational | Embodied | Total |
+| --- | --- | --- | --- |
+| Data centre | 0.055 | 0.012 | 0.067 kWh/GB |
+| Network | 0.059 | 0.013 | 0.072 kWh/GB |
+| User device | 0.080 | 0.081 | 0.161 kWh/GB |
+
+At the model's global average grid intensity of 494 gCO2e/kWh, that is about
+**148 g of CO2e per GB**, or 0.148 g for a 1 MB page. `breakdown` returns each
+segment separately so a published figure can be audited.
+
+Three inputs let you adapt it without forking:
+
+```ts
+trackPageview({
+  route: "/pricing",
+  bytesTransferred: 1_200_000,
+  greenHostingFactor: 0.4,           // share of hosting on renewables, 0 to 1
+  gridIntensityGCO2ePerKWh: 56,      // regional grid, for operational emissions
+  factorGPerGB: 360                  // or bypass the model entirely
+});
+```
+
+Green hosting adjusts **data centre operational emissions only** — a renewable
+host changes nothing about the network or the visitor's device. A fully green
+host removes roughly 18% of the total, not half.
+
+> **Versions before 0.6.0 used 0.5 g/GB**, a per-megabyte figure mislabelled as
+> per-gigabyte. Web estimates from those versions understate emissions by more
+> than two orders of magnitude and should be recomputed.
 
 These helpers are intended for directional tracking, instrumentation, and reporting consistency over time. They are not a scientific truth machine and should not be interpreted as exact end-to-end infrastructure measurements.
 

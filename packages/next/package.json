@@ -35,9 +35,9 @@
     "next": ">=14"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "lint": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsc -p tsconfig.json && node --test dist/index.test.js"
+    "test": "tsc -p tsconfig.json --outDir dist-test && node --test dist-test/index.test.js"
   }
 }

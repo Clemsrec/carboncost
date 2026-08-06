@@ -30,11 +30,60 @@ test("estimateWeb only claims benchmarked confidence with an explicit hosting si
   assert.equal(declared.confidence, "benchmarked");
 });
 
-test("estimateWeb halves the estimate for declared green hosting", () => {
-  const grey = estimateWeb({ bytesTransferred: 1000000, greenHosting: false });
-  const green = estimateWeb({ bytesTransferred: 1000000, greenHosting: true });
+test("estimateWeb matches the Sustainable Web Design intensity for one GB", () => {
+  const oneGigabyte = estimateWeb({ bytesTransferred: 1_000_000_000 });
 
-  assert.equal(green.gramsCO2e, grey.gramsCO2e / 2);
+  // 0.300 kWh/GB across all segments x 494 gCO2e/kWh.
+  assert.ok(Math.abs(oneGigabyte.gramsCO2e - 148.2) < 0.1, `got ${oneGigabyte.gramsCO2e}`);
+});
+
+test("estimateWeb splits the estimate across segments", () => {
+  const { breakdown } = estimateWeb({ bytesTransferred: 1_000_000_000 });
+  const segments =
+    (breakdown?.dataCenterGrams ?? 0) +
+    (breakdown?.networkGrams ?? 0) +
+    (breakdown?.userDeviceGrams ?? 0);
+
+  assert.ok(Math.abs(segments - 148.2) < 0.1);
+  // The user device dominates: it carries 54% of system energy in the model.
+  assert.ok((breakdown?.userDeviceGrams ?? 0) > (breakdown?.dataCenterGrams ?? 0) * 2);
+});
+
+test("estimateWeb applies green hosting to data centre operational energy only", () => {
+  const grey = estimateWeb({ bytesTransferred: 1_000_000_000, greenHosting: false });
+  const green = estimateWeb({ bytesTransferred: 1_000_000_000, greenHosting: true });
+
+  // 0.055 kWh/GB x 494 = 27.17 g removed, not half the total.
+  assert.ok(Math.abs(grey.gramsCO2e - green.gramsCO2e - 27.17) < 0.1);
+  assert.ok(green.gramsCO2e > grey.gramsCO2e * 0.8);
+});
+
+test("estimateWeb accepts a partial green hosting factor", () => {
+  const half = estimateWeb({ bytesTransferred: 1_000_000_000, greenHostingFactor: 0.5 });
+  const full = estimateWeb({ bytesTransferred: 1_000_000_000, greenHostingFactor: 1 });
+  const none = estimateWeb({ bytesTransferred: 1_000_000_000, greenHostingFactor: 0 });
+
+  assert.ok(half.gramsCO2e < none.gramsCO2e && half.gramsCO2e > full.gramsCO2e);
+  assert.equal(half.confidence, "benchmarked");
+});
+
+test("estimateWeb honours a regional grid intensity", () => {
+  const global = estimateWeb({ bytesTransferred: 1_000_000_000 });
+  const lowCarbon = estimateWeb({
+    bytesTransferred: 1_000_000_000,
+    gridIntensityGCO2ePerKWh: 50
+  });
+
+  assert.ok(lowCarbon.gramsCO2e < global.gramsCO2e);
+  // Embodied energy keeps the global average, so it cannot fall to a tenth.
+  assert.ok(lowCarbon.gramsCO2e > global.gramsCO2e * 0.2);
+});
+
+test("estimateWeb honours a caller-supplied intensity per GB", () => {
+  const custom = estimateWeb({ bytesTransferred: 1_000_000_000, factorGPerGB: 360 });
+
+  assert.equal(custom.gramsCO2e, 360);
+  assert.equal(custom.confidence, "benchmarked");
 });
 
 test("estimateAI resolves dated model names back to their known factor", () => {
@@ -127,31 +176,29 @@ test("formatForDisplay rounds very small values down to zero for UI", () => {
   assert.equal(display.methodologyVersion, WEB_METHODOLOGY.methodologyVersion);
 });
 
-test("formatForDisplay maps thresholds to display categories", () => {
-  const low = formatForDisplay({
-    gramsCO2e: 0.003,
-    methodology: WEB_METHODOLOGY,
-    confidence: "benchmarked",
-    assumptions: []
-  });
+test("formatForDisplay maps per-view thresholds to display categories", () => {
+  const categoryFor = (gramsCO2e: number) =>
+    formatForDisplay({
+      gramsCO2e,
+      methodology: WEB_METHODOLOGY,
+      confidence: "benchmarked",
+      assumptions: []
+    }).category;
 
-  const medium = formatForDisplay({
-    gramsCO2e: 0.01,
-    methodology: WEB_METHODOLOGY,
-    confidence: "benchmarked",
-    assumptions: []
-  });
+  assert.equal(categoryFor(0.05), "very-low");
+  assert.equal(categoryFor(0.2), "low");
+  assert.equal(categoryFor(0.5), "medium");
+  assert.equal(categoryFor(1.2), "high");
+});
 
-  const high = formatForDisplay({
-    gramsCO2e: 0.03,
-    methodology: WEB_METHODOLOGY,
-    confidence: "benchmarked",
-    assumptions: []
-  });
+test("a one megabyte page lands in a realistic display band", () => {
+  const pageview = trackPageview({ route: "/", bytesTransferred: 1_000_000 });
+  const display = formatForDisplay(pageview.result);
 
-  assert.equal(low.category, "low");
-  assert.equal(medium.category, "medium");
-  assert.equal(high.category, "high");
+  // ~0.148 g per view. Under the old coefficient this was 0.0005 g and every
+  // real page collapsed into "very-low".
+  assert.equal(display.category, "low");
+  assert.ok(display.gramsPerViewRounded > 0);
 });
 
 test("toEquivalents converts grams to multiple human-readable equivalents", () => {

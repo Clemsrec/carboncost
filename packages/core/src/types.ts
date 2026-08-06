@@ -20,7 +20,28 @@ export type WebPageviewInput = {
   url?: string;
   route?: string;
   bytesTransferred: number;
+  /**
+   * Coarse green hosting signal. `true` maps to a green hosting factor of 1,
+   * `false` and `"unknown"` to 0. Use `greenHostingFactor` for anything partial.
+   */
   greenHosting?: boolean | "unknown";
+  /**
+   * Share of hosting powered by renewable or zero-carbon energy, from 0 to 1.
+   * A provider on a 40% renewable grid is 0.4; one verified by the Green Web
+   * Foundation is 1. Only data centre operational emissions are adjusted.
+   */
+  greenHostingFactor?: number;
+  /**
+   * Grid carbon intensity in gCO2e per kWh, for operational emissions. Defaults
+   * to the global average. Embodied emissions always use the global average,
+   * since hardware manufacturing spans global supply chains.
+   */
+  gridIntensityGCO2ePerKWh?: number;
+  /**
+   * Optional override, in grams of CO2e per GB transferred. Bypasses the model
+   * entirely. Use it when you have an intensity you trust more than the default.
+   */
+  factorGPerGB?: number;
   timestamp?: string;
   metadata?: Record<string, unknown>;
 };

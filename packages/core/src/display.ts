@@ -27,17 +27,25 @@ function round(value: number, precision: number): number {
   return Math.round(value * scale) / scale;
 }
 
-// Thresholds use grams per 1,000 pageviews to stay readable in small UI surfaces.
-function getDisplayCategory(gramsPerThousandViews: number): CarbonDisplayCategory {
-  if (gramsPerThousandViews < 1) {
+/**
+ * Indicative bands in grams of CO2e per single pageview. At the model's default
+ * intensity these correspond to page weights of roughly 700 KB, 2.4 MB and
+ * 4.7 MB. They are a readability aid for UI surfaces, not a certification scale.
+ *
+ * The previous thresholds were expressed per 1,000 views and calibrated against
+ * an intensity that was wrong by more than two orders of magnitude, so every
+ * real page landed in "very-low".
+ */
+function getDisplayCategory(gramsPerView: number): CarbonDisplayCategory {
+  if (gramsPerView < 0.1) {
     return "very-low";
   }
 
-  if (gramsPerThousandViews < 5) {
+  if (gramsPerView < 0.35) {
     return "low";
   }
 
-  if (gramsPerThousandViews < 20) {
+  if (gramsPerView < 0.7) {
     return "medium";
   }
 
@@ -57,7 +65,7 @@ export function formatForDisplay(
     gramsPerView,
     gramsPerViewRounded,
     gramsPerThousandViews,
-    category: getDisplayCategory(gramsPerThousandViews),
+    category: getDisplayCategory(gramsPerView),
     methodologyVersion: result.methodology.methodologyVersion
   };
 }
