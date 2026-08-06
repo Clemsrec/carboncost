@@ -44,3 +44,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # setup-node's registry-url writes an .npmrc resolving the auth token
+          # from NODE_AUTH_TOKEN, and that repo-local file takes precedence over
+          # the one changesets writes from NPM_TOKEN. Without this, publish runs
+          # unauthenticated and npm answers 404 on every PUT.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
