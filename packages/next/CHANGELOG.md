@@ -1,5 +1,12 @@
 # @clemsrec/next
 
+## 0.3.2
+
+### Patch Changes
+
+- Updated dependencies [760796e]
+  - carbone-cost@0.7.0
+
 ## 0.3.1
 
 ### Patch Changes
