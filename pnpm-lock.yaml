@@ -61,7 +61,15 @@ importers:
         specifier: workspace:*
         version: link:../core
 
-  packages/core: {}
+  packages/core:
+    dependencies:
+      react:
+        specifier: '>=18'
+        version: 19.2.6
+    devDependencies:
+      '@types/react':
+        specifier: ^19.1.0
+        version: 19.2.18
 
   packages/next:
     dependencies:

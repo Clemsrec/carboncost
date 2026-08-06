@@ -14,6 +14,14 @@
     "./browser": {
       "types": "./dist/browser/index.d.ts",
       "import": "./dist/browser/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js"
+    },
+    "./react/badge": {
+      "types": "./dist/react/badge.d.ts",
+      "import": "./dist/react/badge.js"
     }
   },
   "files": [
@@ -36,6 +44,17 @@
     "build": "tsc -p tsconfig.build.json",
     "lint": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsc -p tsconfig.json --outDir dist-test && node --test dist-test/estimation.test.js dist-test/diagnostics.test.js dist-test/browser/classify.test.js dist-test/browser/collector.test.js"
+    "test": "tsc -p tsconfig.json --outDir dist-test && node --test dist-test/estimation.test.js dist-test/diagnostics.test.js dist-test/browser/classify.test.js dist-test/browser/collector.test.js dist-test/react/store.test.js"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.0"
   }
 }
