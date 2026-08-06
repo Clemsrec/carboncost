@@ -50,6 +50,22 @@ export type WebPageviewInput = {
    * surfaced by `diagnose()`.
    */
   unknownRequests?: number;
+  /**
+   * Origins behind `unknownRequests`, deduplicated. Lets a UI say "Firestore and
+   * Algolia are not counted" rather than "4 requests are not counted", which is
+   * the difference between a caveat a visitor can act on and one they cannot.
+   */
+  unknownOrigins?: string[];
+  /**
+   * Requests served from cache. Kept separate from `bytesTransferred` so that a
+   * genuinely light page and a fully cached one stay distinguishable.
+   *
+   * Browsers disagree here: Chrome reports a flat ~300 bytes per cached resource
+   * rather than 0, so cached bytes are counted as reported and surfaced rather
+   * than silently subtracted. Subtracting a hardcoded constant would turn a
+   * browser quirk into an invented number the moment Chrome changes it.
+   */
+  cachedRequests?: number;
   timestamp?: string;
   metadata?: Record<string, unknown>;
 };

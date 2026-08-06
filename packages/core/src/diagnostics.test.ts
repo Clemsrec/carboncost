@@ -60,6 +60,30 @@ test("diagnose caps coverage at partial when requests could not be measured", ()
   assert.equal(report.webPageviews.metrics.unknownRequests, 4);
 });
 
+test("diagnose surfaces which origins could not be measured", () => {
+  const report = diagnose({}, [
+    trackPageview({
+      bytesTransferred: 1000,
+      route: "/",
+      unknownRequests: 3,
+      unknownOrigins: ["https://firestore.googleapis.com", "https://algolia.net"]
+    }),
+    trackPageview({
+      bytesTransferred: 2000,
+      route: "/a",
+      unknownRequests: 1,
+      unknownOrigins: ["https://algolia.net"]
+    })
+  ]);
+
+  // Deduplicated and sorted, so a UI can name them instead of counting them.
+  assert.deepEqual(report.webPageviews.unknownOrigins, [
+    "https://algolia.net",
+    "https://firestore.googleapis.com"
+  ]);
+  assert.ok(report.webPageviews.notes.some((note) => note.includes("algolia")));
+});
+
 test("diagnose reports client device as covered by the model", () => {
   const report = diagnose({}, []);
 

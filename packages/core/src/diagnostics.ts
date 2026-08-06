@@ -32,6 +32,8 @@ export interface CoverageDimension {
   metrics: Record<string, number>;
   /** English prose for integrators. Not suitable for end users — translate from `reason`. */
   notes: string[];
+  /** Origins whose size could not be measured, when the dimension has any. */
+  unknownOrigins?: string[];
 }
 
 /** A dimension needs at least this many events before it can be "covered". */
@@ -135,6 +137,26 @@ function classifySamples(
   ]);
 }
 
+function collectUnknownOrigins(events: AnyEvent[]): string[] {
+  const origins = new Set<string>();
+
+  for (const event of events) {
+    const fromInput = (event as { input?: { unknownOrigins?: unknown } }).input?.unknownOrigins;
+    const fromRoot = (event as { unknownOrigins?: unknown }).unknownOrigins;
+    const list = fromInput ?? fromRoot;
+
+    if (Array.isArray(list)) {
+      for (const origin of list) {
+        if (typeof origin === "string" && origin.length > 0) {
+          origins.add(origin);
+        }
+      }
+    }
+  }
+
+  return [...origins].sort();
+}
+
 function countUnknownRequests(events: AnyEvent[]): number {
   return events.reduce((total, event) => {
     const fromInput = getNumber(
@@ -194,10 +216,14 @@ export function diagnose(config: DiagnosticsConfig, recentEvents: AnyEvent[]): C
   // counts them as zero silently undercounts, so a declared count of unmeasured
   // requests caps the verdict at "partial" and says so.
   const unknownRequests = countUnknownRequests(pageviews);
+  const unknownOrigins = collectUnknownOrigins(pageviews);
   if (unknownRequests > 0) {
     webPageviews.metrics.unknownRequests = unknownRequests;
+    webPageviews.unknownOrigins = unknownOrigins;
     webPageviews.notes.push(
-      `${unknownRequests} requests could not be measured and are excluded from the estimate.`
+      unknownOrigins.length > 0
+        ? `${unknownRequests} requests could not be measured and are excluded from the estimate: ${unknownOrigins.join(", ")}.`
+        : `${unknownRequests} requests could not be measured and are excluded from the estimate.`
     );
     if (webPageviews.status === "covered") {
       webPageviews.status = "partial";

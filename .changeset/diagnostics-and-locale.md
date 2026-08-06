@@ -29,3 +29,8 @@ Make diagnostics machine-readable and display strings translatable.
   pageview count would be meaningless.
 - `clientDevice` diagnostics now report `covered`: user device energy is a
   segment of the web model rather than an uncovered dimension.
+- `unknownOrigins` and `cachedRequests` join `WebPageviewInput`, so a collector
+  payload maps onto `trackPageview()` without transformation. `diagnose()`
+  deduplicates the origins and names them in its notes, which is the difference
+  between telling a visitor "Firestore and Algolia are not counted" and "4
+  requests are not counted".
