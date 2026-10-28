@@ -1,6 +1,12 @@
-# carbon-site-kit
+# Carbon Site Kit
 
 Carbon Site Kit is a lightweight SDK for estimating the carbon impact of websites and AI-powered features. It is designed for developers, agencies, and product teams who want a practical way to instrument web delivery and token-based AI usage without adding heavy complexity.
+
+**One product, several names, so here they are in one place.** The product is
+**Carbon Site Kit**. The core package on npm is `carbone-cost` — that is the name
+you install. The repository is `Clemsrec/carboncost`. The adapters are published
+under the `@clemsrec` scope. None of those names are changing; this paragraph
+exists so you do not have to guess that they are the same thing.
 
 ## Why this exists
 
@@ -25,10 +31,12 @@ Pro features are planned later and are out of scope for this release.
 
 ## Packages
 
-- `carbone-cost`
-- `@clemsrec/browser`
-- `@clemsrec/script-tag`
-- `@clemsrec/next`
+| Package | What it is for |
+| --- | --- |
+| `carbone-cost` | The estimation core, plus `carbone-cost/browser` (page measurement) and `carbone-cost/react` (hook and badge). Start here. |
+| `@clemsrec/browser` | Browser SDK that sends events to an endpoint you host. |
+| `@clemsrec/script-tag` | The same SDK as one global, for sites with no build step. |
+| `@clemsrec/next` | Next.js App Router adapter for the collecting route. |
 
 ## Installation
 
@@ -61,15 +69,53 @@ bundler targeting ES modules. A CommonJS `require()` will fail.
 
 ### Script tag / CDN
 
+The bundle is published to npm, so any npm CDN serves it. It is an IIFE that
+exposes `window.CarbonSiteKit`, and it weighs about 6.7 kB minified.
+
 ```html
-<script src="https://cdn.example.com/carbon-site-kit.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@clemsrec/script-tag@0.2.10/dist/carbon-site-kit.min.js"></script>
 <script>
-  window.CarbonSiteKit.init({ endpoint: "/api/carbon" });
   window.CarbonSiteKit.trackPageview({ bytesTransferred: 1500000 });
 </script>
 ```
 
+Pin the version. An unpinned CDN URL silently upgrades a script you did not
+review, on every visitor, for as long as the tag stays in your HTML.
+
+Two things this build does not do, and both surprise people:
+
+- **It does not measure the page.** `observePage` lives in `carbone-cost/browser`,
+  which is ESM only, so the global expects you to pass `bytesTransferred`
+  yourself. If you want the bytes counted for you, use the npm path below.
+- **It sends nothing until you ask.** `init({ endpoint })` is what turns on the
+  transport; without it, `trackPageview` computes and returns, and that is all.
+
 ## Quick start
+
+### A badge, with no backend at all
+
+The shortest useful integration measures the page and shows the result. Nothing
+is sent, no cookie is written, no storage is touched — the tally lives in memory
+and disappears with the tab.
+
+```ts
+import { observePage } from "carbone-cost/browser";
+import { formatForDisplay, trackPageview } from "carbone-cost";
+
+observePage({
+  initialRoute: location.pathname,
+  onMeasure(measurement) {
+    const event = trackPageview(measurement);
+    const badge = formatForDisplay(event.result);
+    document.querySelector("#carbon")!.textContent =
+      badge.gramsPerViewRounded + " g CO2e";
+  }
+});
+```
+
+Add an endpoint only when you actually want to aggregate across visitors — that
+is a second decision, with its own privacy consequences, and it is covered under
+[Browser SDK](#browser-sdk) below.
 
 ### Core (Node or browser-safe logic)
 
@@ -104,34 +150,73 @@ const equivalents = toEquivalents(session.totalGrams);
 const methodology = explain();
 ```
 
-### AI model factors
+### AI usage: from tokens to energy to carbon
 
-Token factors are resolved in three steps, and the `confidence` field on the
-result tells you which one was used:
+Since 0.10.0 (`ai-token-estimation-v2`), an AI request is estimated the way
+[Carbon Watch](https://carbonewatch.fr) does it: tokens become server energy,
+energy becomes carbon at the grid of the region where the request is computed,
+and server manufacturing is added on top.
 
-1. **Your own factor** — pass `factorGPer1kTokens` on the input to override
-   everything. Reported as `benchmarked`.
-2. **Known model** — an entry in the built-in table. Model names are normalized
-   first, so `gpt-4o-mini-2024-07-18` resolves to the `gpt-4o-mini` factor.
-   Reported as `benchmarked`.
-3. **Size tier** — unknown models are bucketed by the size qualifier in their
-   name (`mini`/`nano`/`haiku`/`flash` → small, `opus`/`pro`/`large`/`ultra` →
-   large, otherwise medium). This is a naming heuristic, not a measurement, and
-   is always reported as `estimated`.
+```
+compute-equivalent tokens = generated + 0.25 x (read - cached + 0.065 x cached)
+energy (Wh)               = PUE 1.2 x 0.7 Wh per 1,000 x compute-equivalent tokens / 1000
+carbon (g)                = energy / 1000 x grid of the region + 0.019 g per 1,000 compute-equivalent tokens
+```
 
-Step 3 exists so that a model released after this package was published still
-gets a sensible order of magnitude instead of one flat default. When accuracy
-matters, supply your own factor:
+| Assumption | Central | Low | High |
+| --- | --- | --- | --- |
+| Energy per 1,000 generated tokens, before PUE | 0.7 Wh | 0.17 | 5.1 |
+| Token read, relative to a token generated | 0.25 | 1/21 | 0.35 |
+| Token read from cache, relative to a token read | 0.065 | 0.045 | 0.37 |
+| Data centre PUE | 1.2 | 1.09 | 1.27 |
+| Server manufacturing, per 1,000 compute-equivalent tokens | 0.019 g | 0.004 | 0.13 |
+
+The low and high values are returned as `result.range`; `gramsCO2e` stays the
+central value. The grid does not vary within the range. Each value and bound is
+sourced in Carbon Watch's sensitivity notes (CLEER 2026, Elsworth et al. 2025,
+EcoLogits 0.11.3, Jegham et al. 2025, Irminsul 2026, BoaviztAPI 2.5.0).
+
+The region defaults to where the provider mainly computes: `US` for OpenAI,
+Anthropic and Google, `EU` for Mistral, the world average otherwise. A region
+the table does not know counts at the world average, never at the cleanest grid.
 
 ```ts
 const event = trackAIUsage({
-  provider: "other",
-  model: "in-house-llm",
-  promptTokens: 1200,
-  completionTokens: 400,
-  factorGPer1kTokens: 0.31
+  provider: "mistral",
+  model: "mistral-medium",
+  promptTokens: 12_000,
+  cachedTokens: 9_000,       // part of promptTokens served from cache
+  completionTokens: 800,
+  region: "FR"               // where the request is computed, if you know it
 });
+
+event.result.gramsCO2e;      // central estimate
+event.result.range;          // { low, high }
+event.result.breakdown;      // energyWh, gridIntensityGCO2ePerKWh, embodiedGrams, ...
 ```
+
+When you know your deployment better, override what you know. `whPer1kOutputTokens`
+and `pue` hold on both bounds, since they are facts, not assumptions.
+`factorGPer1kTokens` bypasses the model entirely and is the only case reported as
+`benchmarked`.
+
+What the model leaves out: training, network transfer, end of life, the user's
+device, and reasoning tokens a provider does not report in `completionTokens`.
+The model name no longer selects a factor: the built-in table of 2024 models had
+no published source, and the range already spans small to frontier models.
+
+### Grid intensity by region
+
+`region` sets the grid from a built-in table (`GRID_REGIONS`): Ember's 2025
+lifecycle intensities, rounded to the unit, and ADEME Base Carbone 2024 for
+France (51.9 gCO2e/kWh). Codes are ISO 3166 alpha-2, plus `EU` and `WORLD`.
+
+For web pageviews, `region` is where the site is hosted (data centre and
+network) and `visitorRegion` is where the visitor is (user device only). An
+explicit `gridIntensityGCO2ePerKWh` wins over both, and an unknown code keeps the
+model default of 494 gCO2e/kWh, with an assumption line saying so. Web estimates
+have no `range`: the Sustainable Web Design Model publishes no bounds, and this
+package does not invent them.
 
 ### Measuring a page in the browser
 
@@ -373,10 +458,29 @@ export async function POST(request: Request) {
 }
 ```
 
-`collectHandler` responds `405` to non-POST, `413` above `maxBodyBytes` (64 KB by
-default), `400` on malformed JSON or an unsupported event type, `500` if your
-`onEvent` throws, and `200 {"ok":true}` otherwise. It accepts both the
-`{ event }` envelope sent by the browser SDK and a bare event object.
+`collectHandler` responds `405` to non-POST, `429` when `rateLimit` refuses,
+`413` above `maxBodyBytes` (64 KB by default), `400` on malformed JSON or an
+input that fails validation, `500` if your `onEvent` throws, and
+`200 {"ok":true}` otherwise. It accepts both the `{ event }` envelope sent by the
+browser SDK and a bare event object.
+
+Since 0.4.0 it never trusts the client's numbers. The input is validated with a
+strict schema (unknown fields, negative or absurd values and nested metadata are
+refused), the result is **recomputed on the server** from that input, and the
+event is dated on arrival. `onEvent` receives the recomputed event.
+
+```ts
+import { createMemoryRateLimiter, createNextCarbon } from "@clemsrec/next";
+
+const carbon = createNextCarbon({
+  rateLimit: createMemoryRateLimiter({ limit: 60, windowMs: 60_000 }),
+  onEvent: saveToYourStore
+});
+```
+
+`createMemoryRateLimiter` counts in the memory of one process. On serverless
+platforms each instance counts on its own: use a shared store or your platform's
+firewall there, through the same `rateLimit` hook.
 
 ```ts
 import { createNextCarbon } from "@clemsrec/next";
@@ -406,7 +510,8 @@ export async function POST(request: Request) {
 Carbon Site Kit uses estimation models with explicit versioning:
 
 - `web-estimation-v2`
-- `ai-token-estimation-v1`
+- `ai-token-estimation-v2` (since 0.10.0; `v1` priced every token, read or
+  generated, at an unsourced per-model factor)
 
 ### Web estimation
 
@@ -424,14 +529,16 @@ At the model's global average grid intensity of 494 gCO2e/kWh, that is about
 **148 g of CO2e per GB**, or 0.148 g for a 1 MB page. `breakdown` returns each
 segment separately so a published figure can be audited.
 
-Three inputs let you adapt it without forking:
+These inputs let you adapt it without forking:
 
 ```ts
 trackPageview({
   route: "/pricing",
   bytesTransferred: 1_200_000,
   greenHostingFactor: 0.4,           // share of hosting on renewables, 0 to 1
-  gridIntensityGCO2ePerKWh: 56,      // regional grid, for operational emissions
+  region: "FR",                      // hosting grid from the built-in table
+  visitorRegion: "FR",               // visitor device grid
+  gridIntensityGCO2ePerKWh: 56,      // or an explicit grid, which wins over region
   factorGPerGB: 360                  // or bypass the model entirely
 });
 ```

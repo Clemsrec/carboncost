@@ -3,6 +3,8 @@ export * from "./methodology.js";
 export * from "./display.js";
 export * from "./equivalents.js";
 export * from "./diagnostics.js";
+export * from "./factors.js";
+export { sumRanges } from "./range.js";
 export {
   estimateWeb,
   estimateAI,

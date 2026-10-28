@@ -86,28 +86,94 @@ test("estimateWeb honours a caller-supplied intensity per GB", () => {
   assert.equal(custom.confidence, "benchmarked");
 });
 
-test("estimateAI resolves dated model names back to their known factor", () => {
-  const dated = estimateAI({
-    provider: "openai",
-    model: "GPT-4o-mini-2024-07-18",
-    promptTokens: 1000,
-    completionTokens: 0
+test("estimateAI converts tokens to energy, then carbon at the provider's region", () => {
+  const result = estimateAI({
+    provider: "anthropic",
+    model: "claude-sonnet-4-5",
+    promptTokens: 10_000,
+    cachedTokens: 8_000,
+    completionTokens: 1_000
   });
 
-  assert.equal(dated.confidence, "benchmarked");
-  assert.equal(dated.breakdown?.factorGPer1kTokens, 0.09);
+  // 1,000 generated + 0.25 x (2,000 uncached + 0.065 x 8,000 cached) = 1,630
+  // compute-equivalent tokens; x 0.7 Wh/1k x PUE 1.2 = 1.3692 Wh; x 384 g/kWh
+  // (US) = 0.52577 g; plus 0.019 g/1k x 1.63 = 0.03097 g of manufacturing.
+  assert.equal(result.breakdown?.computeEquivalentTokens, 1630);
+  assert.ok(Math.abs((result.breakdown?.energyWh ?? 0) - 1.3692) < 1e-6);
+  assert.equal(result.breakdown?.gridIntensityGCO2ePerKWh, 384);
+  assert.ok(Math.abs(result.gramsCO2e - 0.556743) < 1e-6, `got ${result.gramsCO2e}`);
+  assert.equal(result.confidence, "estimated");
 });
 
-test("estimateAI falls back to a size tier for unknown models", () => {
-  const large = estimateAI({
-    provider: "anthropic",
-    model: "claude-opus-9",
-    promptTokens: 1000,
+test("estimateAI bills a token read below a token generated, and a cached one lower still", () => {
+  const base = { provider: "openai" as const, model: "gpt-5" };
+  const generated = estimateAI({ ...base, promptTokens: 0, completionTokens: 1000 });
+  const read = estimateAI({ ...base, promptTokens: 1000, completionTokens: 0 });
+  const cached = estimateAI({ ...base, promptTokens: 1000, cachedTokens: 1000, completionTokens: 0 });
+
+  assert.ok(Math.abs(read.gramsCO2e / generated.gramsCO2e - 0.25) < 1e-3);
+  assert.ok(cached.gramsCO2e < read.gramsCO2e * 0.1);
+});
+
+test("estimateAI never counts more cached tokens than prompt tokens", () => {
+  const result = estimateAI({
+    provider: "openai",
+    model: "gpt-5",
+    promptTokens: 100,
+    cachedTokens: 5000,
     completionTokens: 0
   });
 
-  assert.equal(large.confidence, "estimated");
-  assert.equal(large.breakdown?.factorGPer1kTokens, 0.42);
+  assert.equal(result.breakdown?.cachedTokens, 100);
+});
+
+test("estimateAI uses the grid of the region where the request is computed", () => {
+  const base = { model: "any", promptTokens: 0, completionTokens: 10_000 };
+  const us = estimateAI({ ...base, provider: "openai" });
+  const eu = estimateAI({ ...base, provider: "mistral" });
+  const france = estimateAI({ ...base, provider: "mistral", region: "fr" });
+  const unknown = estimateAI({ ...base, provider: "other", region: "XX" });
+  const custom = estimateAI({ ...base, provider: "openai", gridIntensityGCO2ePerKWh: 0 });
+
+  assert.equal(us.breakdown?.gridIntensityGCO2ePerKWh, 384);
+  assert.equal(eu.breakdown?.gridIntensityGCO2ePerKWh, 210);
+  assert.equal(france.breakdown?.gridIntensityGCO2ePerKWh, 51.9);
+  // Never the cleanest grid for a region nobody knows.
+  assert.equal(unknown.breakdown?.gridIntensityGCO2ePerKWh, 458);
+  // Manufacturing does not depend on the grid.
+  assert.equal(custom.gramsCO2e, custom.breakdown?.embodiedGrams);
+  assert.ok(france.gramsCO2e < eu.gramsCO2e && eu.gramsCO2e < us.gramsCO2e);
+});
+
+test("estimateAI returns a range around the central value", () => {
+  const result = estimateAI({
+    provider: "anthropic",
+    model: "claude-opus-4-5",
+    promptTokens: 20_000,
+    cachedTokens: 15_000,
+    completionTokens: 2_000
+  });
+
+  assert.ok(result.range);
+  assert.ok(result.range.low < result.gramsCO2e && result.gramsCO2e < result.range.high);
+});
+
+test("estimateAI keeps caller-supplied energy and PUE on both bounds", () => {
+  const result = estimateAI({
+    provider: "other",
+    model: "in-house",
+    promptTokens: 0,
+    completionTokens: 1000,
+    whPer1kOutputTokens: 1,
+    pue: 1.1,
+    gridIntensityGCO2ePerKWh: 100
+  });
+
+  // 1 Wh x 1.1 = 1.1 Wh x 100 g/kWh = 0.11 g, plus manufacturing.
+  assert.ok(Math.abs((result.breakdown?.energyWh ?? 0) - 1.1) < 1e-9);
+  assert.ok(Math.abs(result.gramsCO2e - (0.11 + 0.019)) < 1e-9);
+  assert.ok(Math.abs(result.range!.low - (0.11 + 0.004)) < 1e-9);
+  assert.ok(Math.abs(result.range!.high - (0.11 + 0.13)) < 1e-9);
 });
 
 test("estimateAI honours a caller-supplied factor", () => {
@@ -121,6 +187,7 @@ test("estimateAI honours a caller-supplied factor", () => {
 
   assert.equal(custom.confidence, "benchmarked");
   assert.equal(custom.gramsCO2e, 2);
+  assert.equal(custom.range, undefined);
 });
 
 test("resolveModelTier buckets models by their size qualifier", () => {
@@ -156,6 +223,52 @@ test("aggregateEvents returns totals", () => {
   const result = aggregateEvents(events, { groupBy: "type" });
   assert.equal(result.totalEvents, 2);
   assert.equal(result.buckets.length, 2);
+});
+
+test("aggregateEvents sums bounds, counting an event without bounds at its central value", () => {
+  const web = trackPageview({ bytesTransferred: 1_000_000 });
+  const ai = trackAIUsage({ provider: "openai", model: "gpt-5", promptTokens: 0, completionTokens: 1000 });
+  const result = aggregateEvents([web, ai], { groupBy: "type" });
+
+  assert.ok(result.range);
+  assert.ok(Math.abs(result.range.low - (web.result.gramsCO2e + ai.result.range!.low)) < 1e-6);
+  assert.ok(Math.abs(result.range.high - (web.result.gramsCO2e + ai.result.range!.high)) < 1e-6);
+  assert.equal(result.buckets.find((bucket) => bucket.key === "web.pageview")?.range, undefined);
+  assert.deepEqual(aggregateEvents([web]).range, undefined);
+});
+
+test("estimateWeb takes the hosting grid from a region code", () => {
+  const france = estimateWeb({ bytesTransferred: 1_000_000_000, region: "FR" });
+  const explicit = estimateWeb({ bytesTransferred: 1_000_000_000, gridIntensityGCO2ePerKWh: 51.9 });
+
+  assert.equal(france.gramsCO2e, explicit.gramsCO2e);
+  // 0.194 kWh/GB of operational energy at 51.9 g, 0.106 of embodied at 494 g.
+  assert.ok(Math.abs(france.gramsCO2e - 62.4326) < 1e-3, `got ${france.gramsCO2e}`);
+  assert.equal(france.range, undefined);
+});
+
+test("estimateWeb lets an explicit intensity win over a region, and ignores unknown codes", () => {
+  const both = estimateWeb({ bytesTransferred: 1_000_000_000, region: "FR", gridIntensityGCO2ePerKWh: 494 });
+  const unknown = estimateWeb({ bytesTransferred: 1_000_000_000, region: "ZZ" });
+  const defaults = estimateWeb({ bytesTransferred: 1_000_000_000 });
+
+  assert.equal(both.gramsCO2e, defaults.gramsCO2e);
+  assert.equal(unknown.gramsCO2e, defaults.gramsCO2e);
+  assert.ok(unknown.assumptions.some((line) => line.includes("ZZ")));
+});
+
+test("estimateWeb applies the visitor region to the user device only", () => {
+  const hostedInUs = estimateWeb({ bytesTransferred: 1_000_000_000, region: "US" });
+  const visitorInFrance = estimateWeb({
+    bytesTransferred: 1_000_000_000,
+    region: "US",
+    visitorRegion: "FR"
+  });
+
+  assert.equal(visitorInFrance.breakdown?.dataCenterGrams, hostedInUs.breakdown?.dataCenterGrams);
+  assert.equal(visitorInFrance.breakdown?.networkGrams, hostedInUs.breakdown?.networkGrams);
+  assert.equal(visitorInFrance.breakdown?.deviceGridIntensityGCO2ePerKWh, 51.9);
+  assert.ok((visitorInFrance.breakdown?.userDeviceGrams ?? 0) < (hostedInUs.breakdown?.userDeviceGrams ?? 0));
 });
 
 test("formatForDisplay rounds very small values down to zero for UI", () => {
@@ -292,6 +405,7 @@ test("aggregateSession separates pageview and AI grams", () => {
   assert.equal(round6(session.pageviewGrams + session.aiGrams), round6(session.totalGrams));
   // The average is per pageview, so AI must not inflate it.
   assert.equal(session.averageGramsPerView, session.pageviewGrams);
+  assert.ok(session.range && session.range.low < session.totalGrams && session.totalGrams < session.range.high);
 });
 
 function round6(value: number): number {

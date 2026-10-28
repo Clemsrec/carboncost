@@ -1,10 +1,18 @@
+import {
+  AI_ENERGY_FACTORS,
+  AI_PROVIDER_DEFAULT_REGION,
+  gridIntensityForRegion,
+  type AIEnergyFactors
+} from "./factors.js";
 import { AI_METHODOLOGY, WEB_METHODOLOGY } from "./methodology.js";
+import { sumRanges } from "./range.js";
 import type {
   AIUsageInput,
   AIUsageEvent,
   AggregateBucket,
   AggregateOptions,
   CarbonEvent,
+  CarbonRange,
   CarbonResult,
   MethodologyMetadata,
   WebPageviewEvent,
@@ -35,35 +43,11 @@ const GLOBAL_GRID_INTENSITY_G_PER_KWH = 494;
 const BYTES_PER_GB = 1_000_000_000;
 
 /**
- * Known per-model factors, in grams of CO2e per 1,000 tokens.
- *
- * Keys are `provider:model` after normalization (lowercase, trailing version or
- * date suffix removed), so `gpt-4o-mini-2024-07-18` resolves to `openai:gpt-4o-mini`.
- * A hit here is reported with confidence `benchmarked`.
- */
-const AI_MODEL_FACTORS_G_PER_1K_TOKENS: Record<string, number> = {
-  "openai:gpt-4o": 0.42,
-  "openai:gpt-4o-mini": 0.09,
-  "anthropic:claude-3-5-sonnet": 0.18,
-  "google:gemini-1.5-pro": 0.35,
-  "mistral:mistral-large": 0.25
-};
-
-/**
- * Size-class fallback for models absent from the table above.
- *
- * Model names go stale fast, so instead of a hardcoded list that rots, unknown
- * models are bucketed by the size qualifier vendors put in the name. This is a
- * naming-convention heuristic, not a measurement: results are always reported
- * with confidence `estimated`.
+ * Size class read from a model name. A naming-convention heuristic, not a
+ * measurement; the energy model does not use it, since only frontier-class chat
+ * models have a sourced factor and the range already spans the others.
  */
 export type AIModelTier = "small" | "medium" | "large";
-
-const AI_TIER_FACTORS_G_PER_1K_TOKENS: Record<AIModelTier, number> = {
-  small: 0.09,
-  medium: 0.2,
-  large: 0.42
-};
 
 const SMALL_TIER_HINTS = new Set(["mini", "nano", "small", "lite", "haiku", "flash", "tiny"]);
 const LARGE_TIER_HINTS = new Set(["opus", "ultra", "large", "pro", "max", "heavy"]);
@@ -75,7 +59,7 @@ function round(value: number, precision = 6): number {
 
 /**
  * Strips casing plus trailing date/version suffixes: `-2024-08-06`, `-20250514`,
- * `@2.1`, `:v3`. Keeps the family name that the factor table is keyed on.
+ * `@2.1`, `:v3`. Keeps the family name.
  */
 function normalizeModelName(model: string): string {
   return model
@@ -101,39 +85,6 @@ export function resolveModelTier(model: string): AIModelTier {
   }
 
   return "medium";
-}
-
-type ResolvedFactor = {
-  factor: number;
-  confidence: CarbonResult["confidence"];
-  source: "override" | "model-table" | "size-tier";
-  tier?: AIModelTier;
-};
-
-function resolveAIFactor(input: AIUsageInput): ResolvedFactor {
-  if (typeof input.factorGPer1kTokens === "number" && input.factorGPer1kTokens >= 0) {
-    return {
-      factor: input.factorGPer1kTokens,
-      confidence: "benchmarked",
-      source: "override"
-    };
-  }
-
-  const key = `${input.provider}:${normalizeModelName(input.model)}`;
-  const known = AI_MODEL_FACTORS_G_PER_1K_TOKENS[key];
-
-  if (known !== undefined) {
-    return { factor: known, confidence: "benchmarked", source: "model-table" };
-  }
-
-  const tier = resolveModelTier(input.model);
-
-  return {
-    factor: AI_TIER_FACTORS_G_PER_1K_TOKENS[tier],
-    confidence: "estimated",
-    source: "size-tier",
-    tier
-  };
 }
 
 function clampUnitInterval(value: number): number {
@@ -178,8 +129,16 @@ export function estimateWeb(input: WebPageviewInput): CarbonResult {
     };
   }
 
-  const gridIntensity = input.gridIntensityGCO2ePerKWh ?? GLOBAL_GRID_INTENSITY_G_PER_KWH;
+  const regionIntensity = input.region === undefined ? undefined : gridIntensityForRegion(input.region);
+  const gridIntensity =
+    input.gridIntensityGCO2ePerKWh ?? regionIntensity ?? GLOBAL_GRID_INTENSITY_G_PER_KWH;
+  const visitorIntensity =
+    input.visitorRegion === undefined ? undefined : gridIntensityForRegion(input.visitorRegion);
+  const deviceGridIntensity = visitorIntensity ?? gridIntensity;
   const green = resolveGreenHostingFactor(input);
+  const unknownRegions = [input.region, input.visitorRegion].filter(
+    (code): code is string => code !== undefined && gridIntensityForRegion(code) === undefined
+  );
 
   // Green hosting reduces data centre operational emissions only. Nothing about
   // a renewable-powered host changes what the network or the visitor's device
@@ -196,7 +155,7 @@ export function estimateWeb(input: WebPageviewInput): CarbonResult {
 
   const userDeviceGrams =
     gigaBytes *
-    (SWD_ENERGY_KWH_PER_GB.userDevice.operational * gridIntensity +
+    (SWD_ENERGY_KWH_PER_GB.userDevice.operational * deviceGridIntensity +
       SWD_ENERGY_KWH_PER_GB.userDevice.embodied * GLOBAL_GRID_INTENSITY_G_PER_KWH);
 
   const gramsCO2e = round(dataCenterGrams + networkGrams + userDeviceGrams);
@@ -215,6 +174,9 @@ export function estimateWeb(input: WebPageviewInput): CarbonResult {
         : "No hosting signal provided, so no green hosting adjustment was applied.",
       ...(unknownRequests > 0
         ? [`${unknownRequests} requests could not be measured and are excluded, so this is a floor.`]
+        : []),
+      ...(unknownRegions.length > 0
+        ? [`Unknown region code ${unknownRegions.join(", ")}, so the default grid was kept.`]
         : [])
     ],
     breakdown: {
@@ -222,6 +184,7 @@ export function estimateWeb(input: WebPageviewInput): CarbonResult {
       bytesTransferred: bytes,
       gigaBytes,
       gridIntensityGCO2ePerKWh: gridIntensity,
+      deviceGridIntensityGCO2ePerKWh: deviceGridIntensity,
       greenHostingFactor: green.factor,
       dataCenterGrams: round(dataCenterGrams),
       networkGrams: round(networkGrams),
@@ -231,44 +194,109 @@ export function estimateWeb(input: WebPageviewInput): CarbonResult {
   };
 }
 
+
+/** Inference energy and carbon for one set of factors, before rounding. */
+function computeAI(
+  tokens: { output: number; uncachedInput: number; cachedInput: number },
+  factors: AIEnergyFactors,
+  gridIntensity: number
+): { computeEquivalentTokens: number; energyWh: number; operationalGrams: number; embodiedGrams: number } {
+  const computeEquivalentTokens =
+    tokens.output +
+    factors.inputTokenEnergyRatio *
+      (tokens.uncachedInput + factors.cacheReadCostRatio * tokens.cachedInput);
+  const energyWh = factors.pue * factors.whPer1kOutputTokens * (computeEquivalentTokens / 1000);
+  const operationalGrams = (energyWh / 1000) * gridIntensity;
+  const embodiedGrams = factors.embodiedGPer1kTokens * (computeEquivalentTokens / 1000);
+  return { computeEquivalentTokens, energyWh, operationalGrams, embodiedGrams };
+}
+
+function resolveAIGrid(input: AIUsageInput): { intensity: number; region: string; declared: boolean } {
+  if (typeof input.gridIntensityGCO2ePerKWh === "number" && input.gridIntensityGCO2ePerKWh >= 0) {
+    return { intensity: input.gridIntensityGCO2ePerKWh, region: "custom", declared: true };
+  }
+
+  const region = (input.region ?? AI_PROVIDER_DEFAULT_REGION[input.provider] ?? "WORLD")
+    .trim()
+    .toUpperCase();
+  const known = gridIntensityForRegion(region);
+
+  return known === undefined
+    ? { intensity: gridIntensityForRegion("WORLD") ?? 458, region: "WORLD", declared: false }
+    : { intensity: known, region, declared: input.region !== undefined };
+}
+
 export function estimateAI(input: AIUsageInput): CarbonResult {
   const promptTokens = Math.max(0, input.promptTokens);
   const completionTokens = Math.max(0, input.completionTokens);
-  const cachedTokens = Math.max(0, input.cachedTokens ?? 0);
-
+  const cachedTokens = Math.min(promptTokens, Math.max(0, input.cachedTokens ?? 0));
   const totalTokens = promptTokens + completionTokens;
-  const uncachedTokens = Math.max(0, totalTokens - cachedTokens);
 
-  const resolved = resolveAIFactor(input);
-  const factor = resolved.factor;
+  if (typeof input.factorGPer1kTokens === "number" && input.factorGPer1kTokens >= 0) {
+    return {
+      gramsCO2e: round((totalTokens / 1000) * input.factorGPer1kTokens),
+      methodology: AI_METHODOLOGY,
+      confidence: "benchmarked",
+      assumptions: [
+        "Uses the caller-supplied factor in grams per 1k tokens, read and generated alike."
+      ],
+      breakdown: {
+        promptTokens,
+        completionTokens,
+        cachedTokens,
+        totalTokens,
+        factorGPer1kTokens: input.factorGPer1kTokens
+      }
+    };
+  }
 
-  const gramsUncached = (uncachedTokens / 1000) * factor;
-  const gramsCached = (cachedTokens / 1000) * factor * 0.1;
-  const gramsCO2e = round(gramsUncached + gramsCached);
+  const tokens = {
+    output: completionTokens,
+    uncachedInput: promptTokens - cachedTokens,
+    cachedInput: cachedTokens
+  };
+  const grid = resolveAIGrid(input);
 
-  const factorAssumption =
-    resolved.source === "override"
-      ? "Uses the caller-supplied token factor in grams per 1k tokens."
-      : resolved.source === "model-table"
-        ? "Uses a known per-model token factor in grams per 1k tokens."
-        : `Model is unknown, so a ${resolved.tier} size-tier factor was applied as a fallback.`;
+  // A value the caller supplies is a fact about their deployment, not an
+  // assumption: it holds on both bounds.
+  const withOverrides = (factors: AIEnergyFactors): AIEnergyFactors => ({
+    ...factors,
+    ...(typeof input.whPer1kOutputTokens === "number" && input.whPer1kOutputTokens >= 0
+      ? { whPer1kOutputTokens: input.whPer1kOutputTokens }
+      : {}),
+    ...(typeof input.pue === "number" && input.pue >= 1 && input.pue <= 3 ? { pue: input.pue } : {})
+  });
+
+  const central = computeAI(tokens, withOverrides(AI_ENERGY_FACTORS.central), grid.intensity);
+  const low = computeAI(tokens, withOverrides(AI_ENERGY_FACTORS.low), grid.intensity);
+  const high = computeAI(tokens, withOverrides(AI_ENERGY_FACTORS.high), grid.intensity);
+  const total = (part: typeof central) => part.operationalGrams + part.embodiedGrams;
 
   return {
-    gramsCO2e,
+    gramsCO2e: round(total(central)),
     methodology: AI_METHODOLOGY,
-    confidence: resolved.confidence,
+    confidence: "estimated",
+    range: { low: round(total(low)), high: round(total(high)) },
     assumptions: [
-      factorAssumption,
-      "Cached tokens use a reduced factor (10% of uncached)."
+      "Converts tokens to server energy, then energy to carbon at the grid of the region where the request is computed.",
+      "A token read costs a quarter of a token generated; a token read from the prefix cache, 6.5% of a token read.",
+      "Data centre overhead is counted with a PUE of 1.2 unless the caller supplies one.",
+      "Server manufacturing is amortised per token, as a bounded assumption.",
+      grid.declared
+        ? `Grid intensity of ${grid.intensity} gCO2e/kWh, as declared by the caller.`
+        : `Grid intensity of ${grid.intensity} gCO2e/kWh, the default region (${grid.region}) for this provider.`,
+      "Model size is unknown to the energy factor: the range covers small to frontier models. Hidden reasoning tokens are not counted unless included in completionTokens."
     ],
     breakdown: {
       promptTokens,
       completionTokens,
       cachedTokens,
       totalTokens,
-      factorGPer1kTokens: factor,
-      gramsUncached,
-      gramsCached
+      computeEquivalentTokens: round(central.computeEquivalentTokens),
+      energyWh: round(central.energyWh),
+      gridIntensityGCO2ePerKWh: grid.intensity,
+      operationalGrams: round(central.operationalGrams),
+      embodiedGrams: round(central.embodiedGrams)
     }
   };
 }
@@ -294,8 +322,13 @@ export function trackAIUsage(input: AIUsageInput): AIUsageEvent {
 export function aggregateEvents(
   events: CarbonEvent[],
   options: AggregateOptions = {}
-): { totalGramsCO2e: number; totalEvents: number; buckets: AggregateBucket[] } {
-  const bucketMap = new Map<string, AggregateBucket>();
+): {
+  totalGramsCO2e: number;
+  totalEvents: number;
+  buckets: AggregateBucket[];
+  range?: CarbonRange;
+} {
+  const bucketMap = new Map<string, CarbonEvent[]>();
 
   for (const event of events) {
     let key: string = event.type;
@@ -308,29 +341,30 @@ export function aggregateEvents(
       key = event.input.model;
     }
 
-    const current = bucketMap.get(key);
-    if (!current) {
-      bucketMap.set(key, {
-        key,
-        gramsCO2e: event.result.gramsCO2e,
-        events: 1
-      });
-      continue;
+    const bucket = bucketMap.get(key);
+    if (bucket) {
+      bucket.push(event);
+    } else {
+      bucketMap.set(key, [event]);
     }
-
-    current.gramsCO2e += event.result.gramsCO2e;
-    current.events += 1;
   }
 
-  const buckets = [...bucketMap.values()].map((bucket) => ({
-    ...bucket,
-    gramsCO2e: round(bucket.gramsCO2e)
-  }));
+  const buckets = [...bucketMap.entries()].map(([key, bucketEvents]): AggregateBucket => {
+    const range = sumRanges(bucketEvents.map((event) => event.result));
+    return {
+      key,
+      gramsCO2e: round(bucketEvents.reduce((sum, event) => sum + event.result.gramsCO2e, 0)),
+      events: bucketEvents.length,
+      ...(range ? { range } : {})
+    };
+  });
+  const range = sumRanges(events.map((event) => event.result));
 
   return {
     totalGramsCO2e: round(events.reduce((sum, event) => sum + event.result.gramsCO2e, 0)),
     totalEvents: events.length,
-    buckets
+    buckets,
+    ...(range ? { range } : {})
   };
 }
 

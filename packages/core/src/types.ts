@@ -14,6 +14,17 @@ export type CarbonResult = {
   confidence: "estimated" | "benchmarked" | "measured";
   assumptions: string[];
   breakdown?: Record<string, number>;
+  /**
+   * The same calculation at the low and high bounds of its sourced assumptions,
+   * around the central `gramsCO2e`. Absent when the model publishes no bounds,
+   * which is not the same as no uncertainty.
+   */
+  range?: CarbonRange;
+};
+
+export type CarbonRange = {
+  low: number;
+  high: number;
 };
 
 export type WebPageviewInput = {
@@ -37,6 +48,18 @@ export type WebPageviewInput = {
    * since hardware manufacturing spans global supply chains.
    */
   gridIntensityGCO2ePerKWh?: number;
+  /**
+   * Where the site is hosted, as an ISO 3166 alpha-2 code (`"FR"`), `"EU"` or
+   * `"WORLD"`. Sets the grid for data centre and network operational emissions.
+   * Ignored when `gridIntensityGCO2ePerKWh` is given; an unknown code keeps the
+   * model default.
+   */
+  region?: string;
+  /**
+   * Where the visitor is, same codes as `region`. Sets the grid for the user
+   * device segment only. Defaults to the hosting grid.
+   */
+  visitorRegion?: string;
   /**
    * Optional override, in grams of CO2e per GB transferred. Bypasses the model
    * entirely. Use it when you have an intensity you trust more than the default.
@@ -75,11 +98,26 @@ export type AIUsageInput = {
   model: string;
   promptTokens: number;
   completionTokens: number;
+  /**
+   * Part of `promptTokens` served from the provider's prefix cache, as OpenAI
+   * reports it in `cached_tokens`. Not added to `promptTokens`.
+   */
   cachedTokens?: number;
   /**
-   * Optional override, in grams of CO2e per 1,000 tokens. Use it when you have a
-   * factor you trust more than the built-in ones (provider disclosure, internal
-   * measurement, a research paper). It bypasses model lookup entirely.
+   * Where the request is computed: ISO 3166 alpha-2 code, `"EU"` or `"WORLD"`.
+   * Defaults to the provider's main region; an unknown code counts at the world
+   * average, never at the cleanest grid.
+   */
+  region?: string;
+  /** Grid intensity in gCO2e per kWh. Wins over `region`. */
+  gridIntensityGCO2ePerKWh?: number;
+  /** Server energy per 1,000 generated tokens, before PUE, when you know the model better. */
+  whPer1kOutputTokens?: number;
+  /** Data centre power usage effectiveness, when the provider publishes it (1 to 3). */
+  pue?: number;
+  /**
+   * Optional override, in grams of CO2e per 1,000 tokens, read and generated
+   * alike. Bypasses the energy model entirely and is reported as `benchmarked`.
    */
   factorGPer1kTokens?: number;
   timestamp?: string;
@@ -111,4 +149,6 @@ export type AggregateBucket = {
   key: string;
   gramsCO2e: number;
   events: number;
+  /** Sum of the events' bounds; an event without bounds counts at its central value. */
+  range?: CarbonRange;
 };

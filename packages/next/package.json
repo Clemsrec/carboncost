@@ -29,7 +29,8 @@
   },
   "homepage": "https://github.com/Clemsrec/carboncost#readme",
   "dependencies": {
-    "carbone-cost": "workspace:*"
+    "carbone-cost": "workspace:*",
+    "zod": "^4.6.0"
   },
   "peerDependencies": {
     "next": ">=14"

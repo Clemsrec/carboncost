@@ -1,4 +1,5 @@
-import type { CarbonEvent, CarbonResult, WebPageviewEvent } from "./types.js";
+import { sumRanges } from "./range.js";
+import type { CarbonEvent, CarbonRange, CarbonResult, WebPageviewEvent } from "./types.js";
 
 export type CarbonDisplayCategory = "very-low" | "low" | "medium" | "high";
 
@@ -24,6 +25,8 @@ export interface SessionAggregation {
   totalViews: number;
   /** `pageviewGrams` divided by `totalViews`. */
   averageGramsPerView: number;
+  /** Bounds of `totalGrams`, when at least one event has them. */
+  range?: CarbonRange;
 }
 
 const DEFAULT_MIN_DISPLAY_GRAMS = 0.001;
@@ -98,11 +101,14 @@ export function aggregateSession(events: CarbonEvent[]): SessionAggregation {
 
   const totalViews = pageviews.length;
 
+  const range = sumRanges(events.map((event) => event.result));
+
   return {
     totalGrams,
     totalViews,
     pageviewGrams,
     aiGrams: round(totalGrams - pageviewGrams, 6),
-    averageGramsPerView: totalViews === 0 ? 0 : round(pageviewGrams / totalViews, 6)
+    averageGramsPerView: totalViews === 0 ? 0 : round(pageviewGrams / totalViews, 6),
+    ...(range ? { range } : {})
   };
 }
