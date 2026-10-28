@@ -1,5 +1,16 @@
 # @clemsrec/next
 
+## 0.4.0
+
+### Minor Changes
+
+- d816463: `collectHandler` no longer trusts the client. The input is validated with a strict zod schema, the result is recomputed on the server and the event is dated on arrival, so `onEvent` receives the recomputed event. Payloads with unknown fields, negative or out-of-range values, or nested metadata now get `400`. New `rateLimit` option (`429`) and `createMemoryRateLimiter()` for single-process servers.
+
+### Patch Changes
+
+- Updated dependencies [d816463]
+  - carbone-cost@0.10.0
+
 ## 0.3.5
 
 ### Patch Changes
