@@ -29,6 +29,11 @@ jobs:
           cache: pnpm
           registry-url: https://registry.npmjs.org
 
+      # Node 22 bundles npm 10, and pnpm 10 delegates `pnpm publish` to the npm
+      # CLI, so the OIDC token exchange only happens with a newer npm.
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@11
+
       - name: Install
         run: pnpm install --frozen-lockfile
 
@@ -43,9 +48,6 @@ jobs:
           createGithubReleases: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          # setup-node's registry-url writes an .npmrc resolving the auth token
-          # from NODE_AUTH_TOKEN, and that repo-local file takes precedence over
-          # the one changesets writes from NPM_TOKEN. Without this, publish runs
-          # unauthenticated and npm answers 404 on every PUT.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # No npm token: publishing authenticates through trusted publishing
+          # (OIDC, via id-token: write). Each package must list this repository
+          # and release.yml as a trusted publisher on npmjs.com.

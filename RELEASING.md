@@ -83,7 +83,7 @@ Generated `.tgz` files are created in each package directory and can be inspecte
 
 - Public repository
 - Main branch protection
-- `NPM_TOKEN` GitHub secret (being phased out, see the npm v12 section below)
+- No npm token secret: publishing uses trusted publishing (see the npm v12 section below)
 - GitHub Actions enabled
 - Issue templates and PR template available
 
@@ -116,14 +116,15 @@ stops working at that point, so publishing needs to move to trusted publishing
    trusted publisher: GitHub Actions, owner `Clemsrec`, repository `carboncost`,
    workflow file `release.yml`. npm does not validate these values when you save
    them, so they must match exactly.
-2. The release workflow already grants `id-token: write`, and now runs Node 22,
-   which satisfies the Node >= 22.14.0 / npm >= 11.5.1 requirement.
-3. Confirm the publish path supports OIDC before removing `NPM_TOKEN`. Changesets
-   picks its publish tool from the lockfile, so with `pnpm-lock.yaml` present it
-   runs `pnpm publish`, not `npm publish` — pnpm's OIDC support must be verified
-   at the pinned pnpm version, or the release step switched to `npm publish`.
-4. Keep `NPM_TOKEN` in place until a trusted-publishing release has succeeded,
-   then delete the secret and revoke the token.
+2. The release workflow grants `id-token: write`, runs Node 22 (>= 22.14.0) and
+   upgrades npm to v11, since Node 22 bundles npm 10 and trusted publishing needs
+   npm >= 11.5.1.
+3. Changesets picks its publish tool from the lockfile, so it runs `pnpm publish`
+   (required here: it rewrites the `workspace:*` dependencies). pnpm 10 packs the
+   package and hands the tarball to the npm CLI, which performs the OIDC exchange.
+   pnpm 11 and later publish without npm and support OIDC natively.
+4. The workflow no longer reads `NPM_TOKEN`. Once a trusted-publishing release
+   has succeeded, delete the `NPM_TOKEN` secret and revoke the token on npmjs.com.
 
 ### Install-time defaults (consumer impact)
 
